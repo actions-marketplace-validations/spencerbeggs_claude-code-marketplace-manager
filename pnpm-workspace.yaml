@@ -2,7 +2,7 @@ packages:
   - .
 autoInstallPeers: true
 configDependencies:
-  "@effected/pnpm-plugin-effect": 0.8.8+sha512-9mlc+kdImTQAER/Q7v/goVMcpT5dnvW3lUTiiv7jYty7VPxns2f96E/T7yU+9cAYTRohBCvUSDQ8xhpxe3BUIQ==
-  "@savvy-web/pnpm-plugin-silk": 0.37.0+sha512-PLAkQmkvC1A4x0/q66Bycb8fk8LgBgh9MLhd6rApPX/FINCyh8Py0HaiV3czTaw3xOM/ehdSN3ab1+X2YujUIw==
+  "@effected/pnpm-plugin-effect": 0.8.14+sha512-GS/JHpAcryADmzcT1O81rzY7chst+kesLn5oY2NLenz7q3iJ4rzTSYqKiwd1vzA9tA5oFgTljvNJczx834ekKg==
+  "@savvy-web/pnpm-plugin-silk": 0.41.0+sha512-94fD7aw32YFMvrqn82EhvyGrf6i7jGo8zYfxf0B9XtTZcJBHSec6u27WT/5MW8AaF3BlJMP6eAtp4NzN50Pjdg==
 minimumReleaseAgeExclude:
   - "@rolldown/binding-openharmony-arm64@1.2.8"
