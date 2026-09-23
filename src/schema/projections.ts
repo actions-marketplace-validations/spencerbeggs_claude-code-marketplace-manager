@@ -1,4 +1,5 @@
 import type { ChangeRecord } from "./marketplace.js";
+import { pluginKey } from "./marketplace.js";
 import type { ReportOutput, ResultStatus } from "./report-output.js";
 import { SCHEMA_URL } from "./report-output.js";
 
@@ -18,41 +19,26 @@ export interface ProjectionInput {
 const deriveStatus = (noop: boolean, succeeded: boolean): ResultStatus =>
 	!succeeded ? "failed" : noop ? "no-op" : "success";
 
-type Field = "path" | "sha";
 type ChangedPlugin = ReportOutput["plugins"][number];
 
 /**
  * Group flat change records into one entry per `(marketplace, name)`,
- * preserving first-seen order. Keyed on the pair, not the name: one plugin is
- * routinely repinned in both marketplaces in the same run, and those are two
- * entries in two files.
+ * preserving first-seen order (a `Map` iterates in insertion order). Keyed on
+ * the pair, not the name: one plugin is routinely repinned in both marketplaces
+ * in the same run, and those are two entries in two files.
  */
 const groupPlugins = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<ChangedPlugin> => {
-	const order: Array<string> = [];
-	const byKey = new Map<string, { head: ChangeRecord; fields: Array<Field> }>();
+	const byKey = new Map<string, ChangedPlugin & { fields: Array<ChangeRecord["field"]> }>();
 	for (const c of changes) {
-		const key = `${c.marketplace}\u0000${c.pluginName}`;
+		const key = pluginKey(c.marketplace, c.pluginName);
 		let entry = byKey.get(key);
 		if (entry === undefined) {
-			entry = { head: c, fields: [] };
+			entry = { marketplace: c.marketplace, manifest: c.path, name: c.pluginName, fields: [] };
 			byKey.set(key, entry);
-			order.push(key);
 		}
 		entry.fields.push(c.field);
 	}
-	return order.flatMap((key) => {
-		const entry = byKey.get(key);
-		return entry === undefined
-			? []
-			: [
-					{
-						marketplace: entry.head.marketplace,
-						manifest: entry.head.path,
-						name: entry.head.pluginName,
-						fields: entry.fields,
-					},
-				];
-	});
+	return [...byKey.values()];
 };
 
 /** Distinct manifest paths the changes touched, first-seen order. */

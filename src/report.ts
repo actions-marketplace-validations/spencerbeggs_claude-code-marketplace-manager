@@ -1,16 +1,16 @@
 import { GitHubMarkdown } from "@effected/github-actions";
 import type { ChangeRecord } from "./schema/marketplace.js";
+import { pluginKey } from "./schema/marketplace.js";
 import type { ReportOutput } from "./schema/report-output.js";
-
-const pairKey = (c: ChangeRecord): string => `${c.marketplace}\u0000${c.pluginName}`;
 
 /** First record of each distinct `(marketplace, name)` pair, in order. */
 const distinctPairs = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<ChangeRecord> => {
 	const seen = new Set<string>();
 	const pairs: Array<ChangeRecord> = [];
 	for (const c of changes) {
-		if (!seen.has(pairKey(c))) {
-			seen.add(pairKey(c));
+		const key = pluginKey(c.marketplace, c.pluginName);
+		if (!seen.has(key)) {
+			seen.add(key);
 			pairs.push(c);
 		}
 	}

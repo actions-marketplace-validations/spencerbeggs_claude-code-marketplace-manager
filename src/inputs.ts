@@ -5,6 +5,7 @@ import { INPUT_DEFAULTS } from "./contract.js";
 import { InvalidInputError } from "./errors/errors.js";
 import type { PluginPatch } from "./schema/input.js";
 import { decodeJsonInput } from "./schema/input.js";
+import { pluginKey } from "./schema/marketplace.js";
 
 /** Merge method for PR auto-merge. Meaningful only in `pr` mode. */
 export type AutoMergeMethod = "merge" | "squash" | "rebase";
@@ -56,7 +57,7 @@ const rejectLegacyUrl = (parsed: unknown): Effect.Effect<void, InvalidInputError
 const rejectDuplicates = (patches: ReadonlyArray<PluginPatch>): Effect.Effect<void, InvalidInputError> => {
 	const seen = new Set<string>();
 	for (const p of patches) {
-		const key = `${p.marketplace}\u0000${p.name}`;
+		const key = pluginKey(p.marketplace, p.name);
 		if (seen.has(key)) {
 			return Effect.fail(
 				new InvalidInputError({ field: "json", reason: `duplicate patch for ${p.name} in ${p.marketplace}` }),
