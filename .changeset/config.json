@@ -5,7 +5,7 @@
 	"changelog": [
 		"@savvy-web/changelog",
 		{
-			"repo": "spencerbeggs/claude-code-marketplace-manager"
+			"repo": "spencerbeggs/ai-plugin-marketplace-manager"
 		}
 	],
 	"commit": false,

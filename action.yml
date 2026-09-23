@@ -1,5 +1,5 @@
-name: "Claude Code Marketplace Manager"
-description: Automatically repin Claude Code plugins to new commit SHAs
+name: "AI Plugin Marketplace Manager"
+description: Repin Claude Code and GitHub Copilot marketplace plugins to new commit SHAs as verified commits
 author: C. Spencer Beggs
 branding:
   icon: refresh-cw
