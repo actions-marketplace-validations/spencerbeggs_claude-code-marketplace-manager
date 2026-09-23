@@ -11,14 +11,16 @@ export const OUTPUT_SCHEMA_VERSION = "2.0";
  * Every label the CLI tracks, oldest first; the current one is the newest.
  *
  * @remarks
- * Starts fresh at `2.0`. The repository was renamed from
- * `claude-code-marketplace-manager` at v2, and the CLI derives each tracked
- * label's `$id` from the *current* repo name — so tracking `1.0` would demand
- * that the committed 1.0 files declare an `$id` they never had. `schemas/1.0/`
- * stays committed byte-for-byte under the old identity, served at its original
- * URLs through GitHub's rename redirect, and is deliberately absent here.
+ * `1.0` is a frozen label: the CLI checks the file exists and declares its
+ * derived `$id`, but never regenerates it. The repository was renamed from
+ * `claude-code-marketplace-manager` at v2, and the CLI derives every tracked
+ * label's `$id` from the *current* repo name, so the two 1.0 files had their
+ * `$id` rewritten to the new name by hand at the rename — the one edit a
+ * frozen file ever takes. Their `$schema` enum (the URL v1 payloads emit)
+ * still names the old repo on purpose: v1 keeps emitting it, and GitHub's
+ * rename redirect resolves it.
  */
-export const OUTPUT_SCHEMA_VERSIONS: ReadonlyArray<string> = [OUTPUT_SCHEMA_VERSION];
+export const OUTPUT_SCHEMA_VERSIONS: ReadonlyArray<string> = ["1.0", OUTPUT_SCHEMA_VERSION];
 
 /**
  * Where a generated JSON Schema document is hosted: raw from this repository's

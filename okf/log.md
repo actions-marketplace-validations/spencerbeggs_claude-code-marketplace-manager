@@ -12,6 +12,15 @@
 * Updated marketplace-manager
 * Updated savvy-web/systems
 * Updated spencerbeggs/bot
+* Updated Action Inputs
+* Updated Explicit values only, no release lookup
+* Updated Landing requires a non-empty array of validated, non-no-op changes
+* Updated Result Output
+* Updated The json input is a plugins envelope, not a bare array
+* Updated Validate the result before landing
+* Updated ajv runs with strict false against the bundled SchemaStore schema
+* Updated patch
+* Updated url input and in-band schemaVersion dropped
 
 ## 2026-09-17
 

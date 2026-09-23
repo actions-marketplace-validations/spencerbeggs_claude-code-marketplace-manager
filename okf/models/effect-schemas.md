@@ -6,8 +6,8 @@ resource: ../../src/schema
 status: stable
 generated:
   by: okfit/claude-code
-  at: 2026-09-23T20:44:15Z
-  body_sha256: 56ccb4d054c4ef069a29c599a62ee1ccad5122f1b4d63165e67b89723c9bcd91
+  at: 2026-09-23T21:30:46Z
+  body_sha256: c7bb62420bf561e2507fac4317acdbbc24fbee199192f8a06d1a182b5010aa4c
 sources:
   - id: input-schema
     resource: ../../src/schema/input.ts
@@ -47,7 +47,7 @@ other. The two structural manifest schemas are JSON Schema, not Effect
 Schema, because each validates a third-party document this action does not
 own — see [ajv-strict-false](../decisions/ajv-strict-false.md).
 
-## The identity is constructed once, restarted at v2
+## The identity is constructed once, carried across the rename
 
 `src/schema/input.ts`[^input-schema] owns every fact about where a generated
 document lives:
@@ -55,16 +55,19 @@ document lives:
 - `OUTPUT_SCHEMA_VERSION = "2.0"` — the label both documents are currently
   published under, and the one constant a contract break moves.
 - `OUTPUT_SCHEMA_VERSIONS` — every label the CLI **tracks**, oldest first,
-  with the current one newest; a single entry today, `["2.0"]`. This is a
-  restart, not a continuation of v1's list: the repository was renamed
-  `claude-code-marketplace-manager` → `ai-plugin-marketplace-manager` at
-  v2, the CLI derives each tracked label's `$id` from the *current* repo
-  name, and `schemas/1.0/`'s committed files declare an `$id` under the old
-  name — so keeping `"1.0"` in this list would fail `schema:check` against
-  files that can never match. `schemas/1.0/` stays committed byte-for-byte
-  and untracked, served at its original URL through GitHub's rename
-  redirect. See
-  [repository-renamed-schema-hosting-restarts-at-2-0](../decisions/repository-renamed-schema-hosting-restarts-at-2-0.md).
+  with the current one newest; today `["1.0", "2.0"]`. `1.0` is a frozen
+  label: the CLI checks the file exists and declares its derived `$id`, but
+  never regenerates it. The repository was renamed
+  `claude-code-marketplace-manager` → `ai-plugin-marketplace-manager` at v2,
+  and the CLI derives every tracked label's `$id` from the *current* repo
+  name — so `schemas/1.0/output.json` and `schemas/1.0/input.json` had their
+  `$id` (line 3 of each) rewritten by hand to the new repo name at the
+  rename, the one edit a frozen file ever takes, keeping `1.0` tracked and
+  drift-checked rather than dropped from the list. `schemas/1.0/output.json`
+  line 69's `$schema` enum value deliberately still names the *old* repo
+  URL: v1 payloads emit that URL, and GitHub's rename redirect resolves it.
+  See
+  [repository-renamed-1-0-schema-ids-rewritten](../decisions/repository-renamed-1-0-schema-ids-rewritten.md).
 - A `hosted(name)` helper calling `HostedSchema.github({ repo:
   "spencerbeggs/ai-plugin-marketplace-manager", path: "schemas", name,
   versions, current, appendVersion: false })` — the directory carries the
@@ -137,8 +140,9 @@ above); the published documents are deliberately the stricter default.
   document as unchanged, would-write, or drift, and exits non-zero when a
   build would write or refuse anything. `pnpm ci:test` runs it before
   vitest, so it — not a vitest test — is the drift guard in CI.
-  `schemas/1.0/` is outside `OUTPUT_SCHEMA_VERSIONS`, so this walk never
-  touches it.
+  `schemas/1.0/` is a frozen label inside `OUTPUT_SCHEMA_VERSIONS`, so the
+  walk verifies its file exists and declares its derived `$id` but never
+  regenerates it.
 
 ## What breaks if an entry is wrong
 
@@ -154,8 +158,9 @@ above); the published documents are deliberately the stricter default.
   `fileName`; see [action-contract](action-contract.md).
 - A label listed in `OUTPUT_SCHEMA_VERSIONS` with no file on disk, or a
   frozen file whose `$id` no longer matches the derived one, fails the CLI's
-  pre-flight before anything is written — which is exactly why `1.0` cannot
-  be re-added to the tracked list after the rename.
+  pre-flight before anything is written — which is why the rename required
+  rewriting `schemas/1.0/`'s committed `$id`s rather than leaving `1.0`
+  tracked with stale ones.
 - `Schema.NonEmptyArray` in place of `Schema.Array(...).check(Schema.isMinLength(1))`
   on a published document fails the ajv strict-mode gate in `schema:build`
   (spencerbeggs/effected#818) rather than at decode time — see

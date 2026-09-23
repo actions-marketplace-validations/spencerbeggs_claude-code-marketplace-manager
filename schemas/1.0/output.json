@@ -1,6 +1,6 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"$id": "https://raw.githubusercontent.com/spencerbeggs/claude-code-marketplace-manager/main/schemas/1.0/output.json",
+	"$id": "https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/1.0/output.json",
 	"$ref": "#/$defs/MarketplaceManagerResult",
 	"$defs": {
 		"ChangedPlugin": {
