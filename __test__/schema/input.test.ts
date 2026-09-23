@@ -64,6 +64,29 @@ describe("json input schema", () => {
 		}),
 	);
 
+	it.effect("rejects a path carrying a control character, a `..` segment, or a backslash", () =>
+		Effect.gen(function* () {
+			yield* Effect.flip(
+				decodeJsonInput({
+					plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "\nCo-authored-by: x" }],
+				}),
+			);
+			yield* Effect.flip(
+				decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "a/../b" }] }),
+			);
+			yield* Effect.flip(decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: ".." }] }));
+			yield* Effect.flip(decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "a\\b" }] }));
+		}),
+	);
+
+	it.effect("accepts an ordinary relative path, including a leading-dot segment that is not `..`", () =>
+		Effect.gen(function* () {
+			yield* decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "plugins/copilot" }] });
+			yield* decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "plugin" }] });
+			yield* decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "a/.b/c" }] });
+		}),
+	);
+
 	it.effect("rejects excess keys such as the removed url field", () =>
 		Effect.gen(function* () {
 			yield* Effect.flip(

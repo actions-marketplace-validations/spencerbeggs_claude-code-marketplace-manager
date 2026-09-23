@@ -55,8 +55,14 @@ export const INPUT_SCHEMA_URL: string = InputSchemaIdentity.$id;
 /** Lowercase 40-hex commit SHA, matching the validators' `SHA_RE`. */
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
-/** A non-empty path that is not absolute. */
-const RELATIVE_PATH_PATTERN = /^[^/].*$/;
+/**
+ * A non-empty, relative path with no `..` segment, no backslash, and no C0
+ * control character (a bare `[^/].*` also accepted a leading `\n`, which lands
+ * in the commit body, and `..` segments/backslashes that could escape the
+ * intended directory).
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: deliberately rejects C0 control characters (e.g. a `\n` that would land in the commit body) in a caller-supplied path.
+const RELATIVE_PATH_PATTERN = /^(?!.*(?:^|\/)\.\.(?:\/|$))[^/\\\x00-\x1f][^\\\x00-\x1f]*$/;
 
 /** The marketplaces a patch can target; each owns one fixed manifest path. */
 export const MarketplaceId = Schema.Literals(["claude-code", "copilot"]).annotate({

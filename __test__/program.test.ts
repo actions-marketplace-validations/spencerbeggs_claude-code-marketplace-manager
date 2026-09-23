@@ -14,7 +14,7 @@ import {
 } from "@effected/github";
 import type { ActionStateShape } from "@effected/github-actions";
 import { ActionInput, ActionOutputs, ActionState } from "@effected/github-actions";
-import { Cause, ConfigProvider, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, ConfigProvider, DateTime, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { program } from "../src/program.js";
 
 // The bundled marketplace.json schema requires `owner` at the top level.
@@ -32,7 +32,8 @@ const COPILOT_MANIFEST = `{
 	"owner": { "name": "Acme" },
 	"plugins": [
 		{ "name": "p1", "source": { "source": "github", "repo": "acme/p1", "path": "plugins/copilot" } },
-		{ "name": "p2", "source": "plugins/p2" }
+		{ "name": "p2", "source": "plugins/p2" },
+		{ "name": "p3", "source": { "source": "url", "url": "https://example.com/p.tgz" } }
 	]
 }
 `;
@@ -452,6 +453,18 @@ describe("program", () => {
 				"Marketplace manifest not found for copilot",
 			);
 			assert.strictEqual(outputValue(h.recorded, "status"), "failed");
+
+			// The prose assertion above proves a readable message; this pins the
+			// typed failure itself — the `_tag` a caller would `catchTag` on, and
+			// the structured fields naming exactly which manifest was missing.
+			const errorOption = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
+			assert.isTrue(Option.isSome(errorOption));
+			if (Option.isSome(errorOption)) {
+				const error = errorOption.value as { _tag: string; marketplace: string; path: string };
+				assert.strictEqual(error._tag, "ManifestNotFoundError");
+				assert.strictEqual(error.marketplace, "copilot");
+				assert.strictEqual(error.path, ".github/plugin/marketplace.json");
+			}
 		}),
 	);
 
@@ -476,6 +489,29 @@ describe("program", () => {
 			const exit = yield* Effect.exit(h.run);
 			assert.isTrue(Exit.isFailure(exit));
 			assert.include(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", 'p2: source.source must be "github"');
+			assert.strictEqual(outputValue(h.recorded, "status"), "failed");
+		}),
+	);
+
+	// p3's source is a well-formed object, but `source.source` is "url" rather
+	// than "github" — an unpinnable source shape Review Focus 4 flagged.
+	// Structural (ajv) validation is permissive about this and passes; only the
+	// semantic layer rejects it. Bare doubles: any landing call would die.
+	it.effect("an unpinnable url-sourced copilot entry fails validation and lands nothing", () =>
+		Effect.gen(function* () {
+			const h = withProgram(
+				{
+					json: json([
+						{ name: "p1", marketplace: "claude-code", sha: SHA1 },
+						{ name: "p3", marketplace: "copilot", sha: SHA1 },
+					]),
+					"base-branch": "main",
+				},
+				setup(),
+			);
+			const exit = yield* Effect.exit(h.run);
+			assert.isTrue(Exit.isFailure(exit));
+			assert.include(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", 'p3: source.source must be "github"');
 			assert.strictEqual(outputValue(h.recorded, "status"), "failed");
 		}),
 	);

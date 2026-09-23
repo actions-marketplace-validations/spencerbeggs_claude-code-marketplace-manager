@@ -13,6 +13,7 @@
 				},
 				"manifest": {
 					"type": "string",
+					"enum": [".claude-plugin/marketplace.json", ".github/plugin/marketplace.json"],
 					"description": "Manifest file the entry lives in."
 				},
 				"name": {

@@ -23,7 +23,7 @@
 				},
 				"path": {
 					"type": "string",
-					"pattern": "^[^/].*$",
+					"pattern": "^(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[^/\\\\\\x00-\\x1f][^\\\\\\x00-\\x1f]*$",
 					"description": "New source.path (non-empty, relative)."
 				}
 			},

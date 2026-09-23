@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { CLAUDE_CODE, COPILOT } from "../marketplaces.js";
 import { MarketplaceId, OutputSchemaIdentity } from "./input.js";
 
 /**
@@ -17,7 +18,9 @@ export type ResultStatus = "no-op" | "success" | "failed";
 
 const ChangedPlugin = Schema.Struct({
 	marketplace: MarketplaceId,
-	manifest: Schema.String.annotate({ description: "Manifest file the entry lives in." }),
+	manifest: Schema.Literals([CLAUDE_CODE.path, COPILOT.path]).annotate({
+		description: "Manifest file the entry lives in.",
+	}),
 	name: Schema.String,
 	fields: Schema.Array(Schema.Literals(["path", "sha"])),
 }).annotate({ identifier: "ChangedPlugin" });

@@ -24,6 +24,12 @@ describe("message generation", () => {
 		);
 	});
 
+	it("same plugin name but a different manifestName in each marketplace is not a combined subject", () => {
+		const claude = c("effected", "sha", "1");
+		const copilot = { ...c("effected", "sha", "1", "copilot"), manifestName: "other-repo" };
+		expect(commitSubject([claude, copilot])).toBe("ai(marketplace): repinned 2 plugins");
+	});
+
 	it("otherwise counts distinct (marketplace, name) pairs", () => {
 		expect(commitSubject([c("a", "sha", "1"), c("a", "path", "p"), c("b", "sha", "2", "copilot")])).toBe(
 			"ai(marketplace): repinned 2 plugins",
