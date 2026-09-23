@@ -6,6 +6,15 @@
 		"ChangedPlugin": {
 			"type": "object",
 			"properties": {
+				"marketplace": {
+					"type": "string",
+					"enum": ["claude-code", "copilot"],
+					"description": "Which marketplace manifest the patch targets."
+				},
+				"manifest": {
+					"type": "string",
+					"description": "Manifest file the entry lives in."
+				},
 				"name": {
 					"type": "string"
 				},
@@ -17,7 +26,7 @@
 					}
 				}
 			},
-			"required": ["name", "fields"],
+			"required": ["marketplace", "manifest", "name", "fields"],
 			"additionalProperties": false
 		},
 		"CommitInfo": {
@@ -98,6 +107,13 @@
 						"$ref": "#/$defs/ChangedPlugin"
 					}
 				},
+				"manifests": {
+					"type": "array",
+					"description": "Manifest files the run changed (or, in dry-run, would change), in processing order.",
+					"items": {
+						"type": "string"
+					}
+				},
 				"commit": {
 					"anyOf": [
 						{
@@ -129,6 +145,7 @@
 				"dryRun",
 				"pluginsUpdated",
 				"plugins",
+				"manifests",
 				"commit",
 				"pr"
 			],

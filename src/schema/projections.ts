@@ -18,21 +18,47 @@ export interface ProjectionInput {
 const deriveStatus = (noop: boolean, succeeded: boolean): ResultStatus =>
 	!succeeded ? "failed" : noop ? "no-op" : "success";
 
-/** Group flat change records into `{ name, fields[] }` per plugin, preserving order. */
-const groupPlugins = (
-	changes: ReadonlyArray<ChangeRecord>,
-): ReadonlyArray<{ name: string; fields: Array<"path" | "sha"> }> => {
+type Field = "path" | "sha";
+type ChangedPlugin = ReportOutput["plugins"][number];
+
+/**
+ * Group flat change records into one entry per `(marketplace, name)`,
+ * preserving first-seen order. Keyed on the pair, not the name: one plugin is
+ * routinely repinned in both marketplaces in the same run, and those are two
+ * entries in two files.
+ */
+const groupPlugins = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<ChangedPlugin> => {
 	const order: Array<string> = [];
-	const byName = new Map<string, Array<"path" | "sha">>();
+	const byKey = new Map<string, { head: ChangeRecord; fields: Array<Field> }>();
 	for (const c of changes) {
-		if (!byName.has(c.pluginName)) {
-			byName.set(c.pluginName, []);
-			order.push(c.pluginName);
+		const key = `${c.marketplace}\u0000${c.pluginName}`;
+		let entry = byKey.get(key);
+		if (entry === undefined) {
+			entry = { head: c, fields: [] };
+			byKey.set(key, entry);
+			order.push(key);
 		}
-		byName.get(c.pluginName)?.push(c.field);
+		entry.fields.push(c.field);
 	}
-	return order.map((name) => ({ name, fields: byName.get(name) ?? [] }));
+	return order.flatMap((key) => {
+		const entry = byKey.get(key);
+		return entry === undefined
+			? []
+			: [
+					{
+						marketplace: entry.head.marketplace,
+						manifest: entry.head.path,
+						name: entry.head.pluginName,
+						fields: entry.fields,
+					},
+				];
+	});
 };
+
+/** Distinct manifest paths the changes touched, first-seen order. */
+const touchedManifests = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<string> => [
+	...new Set(changes.map((c) => c.path)),
+];
 
 /** Project the applied-change set and land outcome into the `result` struct. Pure. */
 export const toReportOutput = (input: ProjectionInput): ReportOutput => {
@@ -48,6 +74,7 @@ export const toReportOutput = (input: ProjectionInput): ReportOutput => {
 		dryRun: input.dryRun,
 		pluginsUpdated: plugins.length,
 		plugins,
+		manifests: touchedManifests(input.changes),
 		commit: input.commitSha === null ? null : { sha: input.commitSha, url: input.commitUrl },
 		pr: input.prNumber === null ? null : { number: input.prNumber, url: input.prUrl },
 	};

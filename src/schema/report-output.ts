@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { OutputSchemaIdentity } from "./input.js";
+import { MarketplaceId, OutputSchemaIdentity } from "./input.js";
 
 /**
  * Hosted JSON Schema URL; emitted as the `result`'s `$schema`.
@@ -16,6 +16,8 @@ export const SCHEMA_URL: string = OutputSchemaIdentity.$id;
 export type ResultStatus = "no-op" | "success" | "failed";
 
 const ChangedPlugin = Schema.Struct({
+	marketplace: MarketplaceId,
+	manifest: Schema.String.annotate({ description: "Manifest file the entry lives in." }),
 	name: Schema.String,
 	fields: Schema.Array(Schema.Literals(["path", "sha"])),
 }).annotate({ identifier: "ChangedPlugin" });
@@ -47,6 +49,9 @@ export const ReportOutput = Schema.Struct({
 	dryRun: Schema.Boolean,
 	pluginsUpdated: Schema.Int,
 	plugins: Schema.Array(ChangedPlugin),
+	manifests: Schema.Array(Schema.String).annotate({
+		description: "Manifest files the run changed (or, in dry-run, would change), in processing order.",
+	}),
 	commit: Schema.NullOr(CommitInfo),
 	pr: Schema.NullOr(PrInfo),
 }).annotate({

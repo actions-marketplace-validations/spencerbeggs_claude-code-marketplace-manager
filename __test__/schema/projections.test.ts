@@ -172,4 +172,53 @@ describe("toReportOutput", () => {
 		expect(out.hasFailures).toBe(true);
 		expect(out.pluginsUpdated).toBe(0);
 	});
+
+	it("keeps one name in two marketplaces as two entries and lists both manifests", () => {
+		const claude = {
+			marketplace: "claude-code" as const,
+			path: ".claude-plugin/marketplace.json",
+			pluginName: "effected",
+			manifestName: "spencerbeggs",
+			field: "sha" as const,
+			value: "s",
+		};
+		const copilot = { ...claude, marketplace: "copilot" as const, path: ".github/plugin/marketplace.json" };
+		const out = toReportOutput({
+			mode: "commit",
+			dryRun: false,
+			changes: [claude, copilot, { ...copilot, field: "path" as const, value: "plugins/copilot" }],
+			commitSha: "abc",
+			commitUrl: null,
+			prNumber: null,
+			prUrl: null,
+			succeeded: true,
+			hasFailures: false,
+		});
+		expect(out.pluginsUpdated).toBe(2);
+		expect(out.plugins).toEqual([
+			{ marketplace: "claude-code", manifest: ".claude-plugin/marketplace.json", name: "effected", fields: ["sha"] },
+			{
+				marketplace: "copilot",
+				manifest: ".github/plugin/marketplace.json",
+				name: "effected",
+				fields: ["sha", "path"],
+			},
+		]);
+		expect(out.manifests).toEqual([".claude-plugin/marketplace.json", ".github/plugin/marketplace.json"]);
+	});
+
+	it("reports no manifests for a no-op", () => {
+		const out = toReportOutput({
+			mode: "commit",
+			dryRun: false,
+			changes: [],
+			commitSha: null,
+			commitUrl: null,
+			prNumber: null,
+			prUrl: null,
+			succeeded: true,
+			hasFailures: false,
+		});
+		expect(out.manifests).toEqual([]);
+	});
 });
