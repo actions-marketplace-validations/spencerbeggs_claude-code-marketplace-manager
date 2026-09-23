@@ -75,6 +75,8 @@ export const applyPatches = (
 			Effect.mapError(
 				(e) =>
 					new ManifestValidationError({
+						marketplace: "claude-code",
+						path: MANIFEST_PATH,
 						errors: [`marketplace.json is not a valid marketplace manifest: ${String(e)}`],
 					}),
 			),

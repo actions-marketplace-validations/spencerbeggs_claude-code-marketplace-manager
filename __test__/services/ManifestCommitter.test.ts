@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import type { PullRequestInfo as PullRequestInfoType } from "@effected/github";
 import { GitBranch, GitCommit, PullRequest, PullRequestInfo, Repo, RepoRef } from "@effected/github";
 import { Effect, Layer, Option } from "effect";
+import { CLAUDE_CODE } from "../../src/marketplaces.js";
 import { land } from "../../src/services/ManifestCommitter.js";
 import { MANIFEST_PATH } from "../../src/services/ManifestEditor.js";
 import { validateEdit } from "../../src/services/ManifestValidator.js";
@@ -22,6 +23,7 @@ const EDITED = ORIGINAL.replace("0".repeat(40), "1".repeat(40));
 // every test below.
 const change = Effect.runSync(
 	validateEdit(
+		CLAUDE_CODE,
 		{
 			original: ORIGINAL,
 			editedText: EDITED,

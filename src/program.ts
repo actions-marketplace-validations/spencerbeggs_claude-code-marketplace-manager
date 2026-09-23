@@ -4,6 +4,7 @@ import { Cause, Effect, Exit } from "effect";
 import { InvalidInputError } from "./errors/errors.js";
 import type { ParsedInputs } from "./inputs.js";
 import { parseInputs } from "./inputs.js";
+import { CLAUDE_CODE } from "./marketplaces.js";
 import { buildSummary, commitSubject, defaultCommitMessage, messageBody } from "./report.js";
 import { toReportOutput } from "./schema/projections.js";
 import { ReportOutput } from "./schema/report-output.js";
@@ -103,6 +104,7 @@ const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 		// invariant, both enforced by the type checker rather than by this
 		// function's ordering.
 		const change = yield* validateEdit(
+			CLAUDE_CODE,
 			edit,
 			inputs.patches.map((p) => p.name),
 		);

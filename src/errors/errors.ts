@@ -21,9 +21,11 @@ export class PluginNotFoundError extends Schema.TaggedError<PluginNotFoundError>
 
 /** The resulting manifest failed structural or semantic validation. */
 export class ManifestValidationError extends Schema.TaggedError<ManifestValidationError>()("ManifestValidationError", {
+	marketplace: Schema.String,
+	path: Schema.String,
 	errors: Schema.Array(Schema.String),
 }) {
 	get message(): string {
-		return `Manifest validation failed:\n${this.errors.join("\n")}`;
+		return `Manifest validation failed (${this.marketplace}: ${this.path}):\n${this.errors.join("\n")}`;
 	}
 }

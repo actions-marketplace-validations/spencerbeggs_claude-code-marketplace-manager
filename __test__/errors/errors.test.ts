@@ -12,8 +12,12 @@ describe("errors", () => {
 		expect(new PluginNotFoundError({ name: "ghost" }).message).toBe("Plugin not found in marketplace.json: ghost");
 	});
 
-	it("ManifestValidationError joins the reasons", () => {
-		const e = new ManifestValidationError({ errors: ["a", "b"] });
-		expect(e.message).toBe("Manifest validation failed:\na\nb");
+	it("ManifestValidationError names the manifest and joins the reasons", () => {
+		const e = new ManifestValidationError({
+			marketplace: "copilot",
+			path: ".github/plugin/marketplace.json",
+			errors: ["a", "b"],
+		});
+		expect(e.message).toBe("Manifest validation failed (copilot: .github/plugin/marketplace.json):\na\nb");
 	});
 });
