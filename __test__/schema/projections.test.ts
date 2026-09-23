@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toReportOutput } from "../../src/schema/projections.js";
-import { SCHEMA_URL, SCHEMA_VERSION } from "../../src/schema/report-output.js";
+import { SCHEMA_URL } from "../../src/schema/report-output.js";
 
 const change = { pluginName: "p1", manifestName: "acme", field: "sha" as const, value: "s" };
 
@@ -18,7 +18,8 @@ describe("toReportOutput", () => {
 			hasFailures: false,
 		});
 		expect(out.$schema).toBe(SCHEMA_URL);
-		expect(out.schemaVersion).toBe(SCHEMA_VERSION);
+		// The version lives in the $schema URL's path; there is no in-band copy.
+		expect(Object.hasOwn(out, "schemaVersion")).toBe(false);
 		expect(out.noop).toBe(true);
 		expect(out.status).toBe("no-op");
 		expect(out.pluginsUpdated).toBe(0);

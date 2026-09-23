@@ -77,7 +77,7 @@ outputs:
   result:
     description: |
       Structured JSON describing what the run did, validated by
-      https://raw.githubusercontent.com/spencerbeggs/claude-code-marketplace-manager/main/schemas/1.0/output.json
+      https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/2.0/output.json
       Parse it for the full contract; the scalars below mirror the common facts.
   status:
     description: "no-op | success | failed"

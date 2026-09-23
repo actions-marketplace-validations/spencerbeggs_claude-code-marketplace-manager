@@ -124,10 +124,10 @@ describe("action contract", () => {
 
 		it("derives both URLs from the versioned layout", () => {
 			expect(SCHEMA_URL).toBe(
-				"https://raw.githubusercontent.com/spencerbeggs/claude-code-marketplace-manager/main/schemas/1.0/output.json",
+				"https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/2.0/output.json",
 			);
 			expect(INPUT_SCHEMA_URL).toBe(
-				"https://raw.githubusercontent.com/spencerbeggs/claude-code-marketplace-manager/main/schemas/1.0/input.json",
+				"https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/2.0/input.json",
 			);
 		});
 	});

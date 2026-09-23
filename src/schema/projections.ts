@@ -1,6 +1,6 @@
 import type { ChangeRecord } from "./marketplace.js";
 import type { ReportOutput, ResultStatus } from "./report-output.js";
-import { SCHEMA_URL, SCHEMA_VERSION } from "./report-output.js";
+import { SCHEMA_URL } from "./report-output.js";
 
 /** Inputs to the pure output projection. */
 export interface ProjectionInput {
@@ -40,7 +40,6 @@ export const toReportOutput = (input: ProjectionInput): ReportOutput => {
 	const noop = input.changes.length === 0;
 	return {
 		$schema: SCHEMA_URL,
-		schemaVersion: SCHEMA_VERSION,
 		mode: input.mode,
 		status: deriveStatus(noop, input.succeeded),
 		noop,

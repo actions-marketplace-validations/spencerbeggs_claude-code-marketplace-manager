@@ -12,9 +12,6 @@ import { OutputSchemaIdentity } from "./input.js";
  */
 export const SCHEMA_URL: string = OutputSchemaIdentity.$id;
 
-/** In-band schema version; bumped only on a breaking shape change. */
-export const SCHEMA_VERSION = "1";
-
 /** Human-facing status derived from the machine booleans. */
 export type ResultStatus = "no-op" | "success" | "failed";
 
@@ -42,7 +39,6 @@ export const ReportOutput = Schema.Struct({
 	// decoded `$schema` is typed `string`; runtime decoding still rejects any
 	// other URL.
 	$schema: Schema.Literal(SCHEMA_URL),
-	schemaVersion: Schema.Literal(SCHEMA_VERSION),
 	mode: Schema.Literals(["commit", "pr"]),
 	status: Schema.Literals(["no-op", "success", "failed"]),
 	noop: Schema.Boolean,

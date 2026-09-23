@@ -4,18 +4,19 @@ import { Schema } from "effect";
 /**
  * The version label every generated document is currently published under
  * (`schemas/<version>/`). The one constant a contract break moves.
- *
- * @remarks
- * Independent of the action's own version and of `ReportOutput`'s in-band
- * `schemaVersion` field: this label names the hosted **document**, while
- * `SCHEMA_VERSION` is the value a payload carries in-band.
  */
-export const OUTPUT_SCHEMA_VERSION = "1.0";
+export const OUTPUT_SCHEMA_VERSION = "2.0";
 
 /**
- * Every label the documents have been published under, oldest first; the
- * current one is the newest. Older labels are frozen: the CLI verifies each
- * file still exists and declares its derived `$id`, but never regenerates it.
+ * Every label the CLI tracks, oldest first; the current one is the newest.
+ *
+ * @remarks
+ * Starts fresh at `2.0`. The repository was renamed from
+ * `claude-code-marketplace-manager` at v2, and the CLI derives each tracked
+ * label's `$id` from the *current* repo name — so tracking `1.0` would demand
+ * that the committed 1.0 files declare an `$id` they never had. `schemas/1.0/`
+ * stays committed byte-for-byte under the old identity, served at its original
+ * URLs through GitHub's rename redirect, and is deliberately absent here.
  */
 export const OUTPUT_SCHEMA_VERSIONS: ReadonlyArray<string> = [OUTPUT_SCHEMA_VERSION];
 
@@ -31,7 +32,7 @@ export const OUTPUT_SCHEMA_VERSIONS: ReadonlyArray<string> = [OUTPUT_SCHEMA_VERS
  */
 const hosted = (name: string): HostedSchema =>
 	HostedSchema.github({
-		repo: "spencerbeggs/claude-code-marketplace-manager",
+		repo: "spencerbeggs/ai-plugin-marketplace-manager",
 		path: "schemas",
 		name,
 		versions: OUTPUT_SCHEMA_VERSIONS,
