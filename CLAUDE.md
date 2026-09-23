@@ -51,7 +51,11 @@ ref→sha resolution.
 - Inputs are a manual/`json` **XOR**, enforced in `inputs.ts`; manual-path
   detection looks only at `name`/`sha`/`path` — never `marketplace`, which a
   defaulted `workflow_dispatch` choice input always supplies — and both paths
-  normalize to `ParsedInputs.patches` (`@okf/interfaces/action-inputs.md`).
+  normalize to `ParsedInputs.patches` (`@okf/interfaces/action-inputs.md`,
+  `@okf/gotchas/marketplace-input-ignored-for-manual-path-detection.md`).
+  `JsonInput.plugins` is `Schema.Array(...).check(Schema.isMinLength(1))`,
+  not `Schema.NonEmptyArray`, because its Draft-07 lowering fails ajv's
+  strict gate (`@okf/gotchas/nonemptyarray-blocked-in-published-schemas.md`).
 - Validate the edited **result** before any commit; no-op guard skips validation
   and landing when a manifest's text is byte-stable. Both halves are
   **type-enforced**: `EditResult` is a `NoopEdit | ChangedEdit` union per
@@ -59,6 +63,10 @@ ref→sha resolution.
   `ValidatedManifestChange` that only `validateEdit` mints — one entry per
   changed manifest — so don't reach for `validateManifest` + a raw string at a
   call site (`@okf/conventions/validate-the-result-before-landing.md`).
+  Every touched manifest lands in **one** commit, never one per file
+  (`@okf/decisions/multi-marketplace-repins-land-as-one-commit.md`), and
+  `claude-code`/`copilot` each map to one fixed manifest path with no
+  discovery (`@okf/decisions/fixed-manifest-paths-per-marketplace.md`).
 - `pr` mode **force-resets** the head branch onto `base` every run, discarding
   any earlier run's commits. Deliberate: `branch` defaults to a fixed name, and
   without the reset the PR drifts until it conflicts. A human commit on that
@@ -108,7 +116,11 @@ ref→sha resolution.
   published label is answered by bumping `OUTPUT_SCHEMA_VERSION`, never by
   rewriting in place (`@okf/models/effect-schemas.md`,
   `@okf/decisions/versioned-schema-documents.md`,
-  `@okf/runbooks/bump-the-output-schema-version.md`).
+  `@okf/runbooks/bump-the-output-schema-version.md`). The repo rename
+  restarts the tracked label list at `2.0`, dropping `1.0` from it entirely
+  rather than appending, and `url`/the in-band `schemaVersion` are both gone
+  (`@okf/decisions/repository-renamed-schema-hosting-restarts-at-2-0.md`,
+  `@okf/decisions/url-and-schema-version-dropped.md`).
 
 ## Bundle
 

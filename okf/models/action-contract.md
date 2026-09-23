@@ -6,8 +6,8 @@ resource: ../../src/contract.ts
 status: stable
 generated:
   by: okfit/claude-code
-  at: 2026-09-17T19:20:18Z
-  body_sha256: 08d18999bce97d5f0ec4204fe2d24479d9e4901740a47b1dd3367bd023df3c7a
+  at: 2026-09-23T20:44:15Z
+  body_sha256: 123a308acac609640ad253497f51d891fa174fac49c8706210b851f85e8b7f76
 tags:
   - architecture
   - testing
@@ -18,13 +18,14 @@ tags:
 ## Shape, from the maintainer's side
 
 `src/contract.ts` is deliberately dependency-free — "a description of the
-contract, not a participant in it" (`src/contract.ts:19-21`). It holds four
-things:
+contract, not a participant in it". It holds four things:
 
 - `INPUT_NAMES` — every input declared in `action.yml`, fifteen entries:
-  `name`, `url`, `path`, `sha`, `json`, `mode`, `base-branch`, `branch`,
+  `name`, `marketplace`, `path`, `sha`, `json`, `mode`, `base-branch`, `branch`,
   `commit-message`, `pr-title`, `pr-body`, `auto-merge`, `dry-run`,
-  `app-client-id`, `app-private-key` (`src/contract.ts:30-46`).
+  `app-client-id`, `app-private-key` (`src/contract.ts`). `url` was removed
+  and `marketplace` added at v2 — see
+  [url-and-schema-version-dropped](../decisions/url-and-schema-version-dropped.md).
 - `OUTPUT_NAMES` — every output declared in `action.yml`, nine entries:
   `result`, `status`, `changed`, `mode`, `commit-sha`, `commit-url`,
   `pr-number`, `pr-url`, `plugins-updated` (`src/contract.ts:49-59`).
@@ -78,7 +79,7 @@ legs, plus a third leg that pins the schema URLs the prose quotes:
    that misses them fails nothing. The test asserts the `result` description
    contains `SCHEMA_URL`, the README quotes `SCHEMA_URL` as its example
    `$schema` and links `schemas/<fileName>` for both identities, and both
-   URLs resolve to the versioned `schemas/1.0/` layout
+   URLs resolve to the versioned `schemas/2.0/` layout
    (`__test__/action-contract.test.ts:105-133`). See
    [effect-schemas](effect-schemas.md).
 

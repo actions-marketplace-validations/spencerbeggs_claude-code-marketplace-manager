@@ -1,14 +1,14 @@
 ---
 type: Module
 title: marketplace-manager
-description: The GitHub Action's src/ tree — the three-phase lifecycle, the program.ts orchestration pipeline, layer composition, and the landing/mode split.
+description: The GitHub Action's src/ tree — the three-phase lifecycle, the per-marketplace program.ts orchestration pipeline, layer composition, and the landing/mode split.
 kind: action
 resource: ../../src
 status: stable
 generated:
   by: okfit/claude-code
-  at: 2026-09-13T21:33:34Z
-  body_sha256: c536e28d8ea974f7d3d5b5fab9f8ac1eefa6157627c99400036a247414edf4e7
+  at: 2026-09-23T20:44:15Z
+  body_sha256: 30ed1367596722442af0363996dbce9a517f868f6e2150fee8abeb7f7c4ec3c5
 tags: [architecture]
 ---
 
@@ -76,50 +76,72 @@ for how this is pinned by a fault-injection test.
 The full logical pipeline, in order (step 1 in `program`, steps 2–9 in
 `runOrchestration`):
 
-1. **Parse inputs** (`parseInputs`, `src/inputs.ts:45-147`) → a normalized
+1. **Parse inputs** (`parseInputs`, `src/inputs.ts`) → a normalized
    `ParsedInputs` with a `patches` array, enforcing the manual/`json` XOR
-   (`src/inputs.ts:53-65`). See
+   (`src/inputs.ts`). See
    [action-inputs](../interfaces/action-inputs.md).
-2. **Read manifest** (`readManifest`, `src/services/ManifestEditor.ts:112-113`)
-   from the checkout.
-3. **Apply patches** (`applyPatches`, `src/services/ManifestEditor.ts:55-105`)
-   — format-preserving partial-merge via `@effected/jsonc`, matched by
-   plugin name. An unknown name fails with `PluginNotFoundError`
-   (`src/services/ManifestEditor.ts:79-82`). See
+2. **Per marketplace, in `MARKETPLACE_ORDER` (`claude-code`, then
+   `copilot`)** (`src/program.ts`, `src/marketplaces.ts`): group the
+   patches targeting that marketplace; skip the marketplace entirely if it
+   has none. For each targeted marketplace —
+   **read manifest** (`readManifest`, `src/services/ManifestEditor.ts`)
+   from the checkout, failing with `ManifestNotFoundError` if the fixed
+   path is missing, then
+   **apply patches** (`applyPatches`, `src/services/ManifestEditor.ts`) —
+   format-preserving partial-merge via `@effected/jsonc`, matched by entry
+   name within that manifest, inserting a field absent from `source`
+   rather than only replacing one present. An unknown name fails with
+   `PluginNotFoundError`; a patched entry whose current `source` is not an
+   object (Copilot's bare-string shorthand) fails with
+   `ManifestValidationError` before `JsoncModifier.modify` ever runs,
+   reusing the marketplace descriptor's `sourceErrors` so the message
+   matches what step 3 below would report for the same entry. See
    [patch](../glossary/patch.md).
-4. **No-op guard** (`src/program.ts:72-87`). If the edited text equals the
-   original, emit a `noop` result and stop — no validation, no commit.
-   `EditResult` is a union discriminated on `changed`
-   (`src/services/ManifestEditor.ts:38`), so this guard is also what
-   narrows the edit to the `ChangedEdit` that step 5 requires.
-5. **Validate the result** (`validateEdit`, `src/services/ManifestValidator.ts`)
-   before any commit, returning the branded `ValidatedManifestChange` that
-   `land` requires (`src/program.ts:89-97`). See
-   [validate-the-result-before-landing](../conventions/validate-the-result-before-landing.md).
-6. **Dry-run guard** (`src/program.ts:99-114`). If `dryRun`, emit the
-   summary/output and stop before landing. Dry-run never reads the token
-   identity, so no provisioned token is required on that path.
-7. **Build default messages** (`src/program.ts:116-122`).
+3. **No-op guard, per manifest** (`src/program.ts`). If a manifest's edited
+   text equals its original, skip it — no validation, no commit — and move
+   to the next marketplace. `EditResult` is a union discriminated on
+   `changed` (`src/services/ManifestEditor.ts`), so this guard is also what
+   narrows the edit to the `ChangedEdit` that validation requires. If
+   *every* targeted manifest turns out byte-stable, emit one `noop` result
+   for the whole run and stop.
+4. **Validate the result, per manifest** (`validateEdit`,
+   `src/services/ManifestValidator.ts`) before any commit, returning the
+   branded `ValidatedManifestChange` (now carrying `marketplace` and
+   `path`) that `land` requires. Every targeted manifest is validated
+   before any of them land — **all-or-nothing across files**: the first
+   validation failure stops the run before anything is committed, even a
+   manifest that validated cleanly earlier in the loop. See
+   [validate-the-result-before-landing](../conventions/validate-the-result-before-landing.md)
+   and
+   [landing-requires-a-validated-non-noop-change](../invariants/landing-requires-a-validated-non-noop-change.md).
+5. **Dry-run guard** (`src/program.ts`). If `dryRun`, emit the
+   summary/output — covering every targeted manifest — and stop before
+   landing. Dry-run never reads the token identity, so no provisioned
+   token is required on that path.
+6. **Build default messages** (`src/program.ts`).
    `GitHubToken.botIdentity()` feeds the DCO trailer only; the commit
-   subject/body come from the change set. This runs only on the land path.
-8. **Land** (`land`, `src/services/ManifestCommitter.ts:90-155`) per `mode`
-   (commit or PR).
-9. **Emit** (`src/program.ts:137-148`) the structured `result` output,
-   convenience scalars, and a job summary — both non-fatal.
+   subject/body come from the combined change set across every validated
+   manifest. This runs only on the land path.
+7. **Land** (`land`, `src/services/ManifestCommitter.ts`) per `mode`
+   (commit or PR), given the **non-empty array** of validated changes —
+   one per changed manifest, never one manifest at a time.
+8. **Emit** (`src/program.ts`) the structured `result` output, convenience
+   scalars, and a job summary — both non-fatal.
 
 ## Module layout (`src/`)
 
 | Area | Files | Role |
 | --- | --- | --- |
 | Lifecycle | `pre.ts`, `main.ts`, `post.ts` | Phase entrypoints. |
-| Orchestration | `program.ts` | The main pipeline (above). |
-| Inputs | `inputs.ts` | `parseInputs` → `ParsedInputs`; enforces the XOR. |
+| Orchestration | `program.ts` | The main pipeline (above), looping `MARKETPLACE_ORDER`. |
+| Marketplaces | `marketplaces.ts` | Plain-data `Marketplace` descriptors — fixed `path`, compiled structural `validateStructural`, and `sourceErrors` — one per kind (`CLAUDE_CODE`, `COPILOT`), keyed by `MARKETPLACES` and ordered by `MARKETPLACE_ORDER`. Adding a third marketplace is a new descriptor plus a literal in `MarketplaceId`; `program.ts` does not change. |
+| Inputs | `inputs.ts` | `parseInputs` → `ParsedInputs`; enforces the XOR (`marketplace` excluded from manual-path detection); rejects a legacy `url` key and duplicate `(marketplace, name)` pairs. |
 | Contract | `contract.ts` | The declared input/output names and non-empty defaults; dependency-free. See [action-contract](../models/action-contract.md). |
-| Errors | `errors/errors.ts` | Tagged errors: `InvalidInputError`, `PluginNotFoundError`, `ManifestValidationError`. |
+| Errors | `errors/errors.ts` | Tagged errors: `InvalidInputError`, `PluginNotFoundError`, `ManifestNotFoundError`, `ManifestValidationError` — the last three each carry `marketplace` and `path`. |
 | Schema | `schema/marketplace.ts`, `schema/input.ts`, `schema/report-output.ts`, `schema/projections.ts` | Effect Schemas (source of truth) plus the pure output projection. See [effect-schemas](../models/effect-schemas.md). |
-| Services | `services/ManifestEditor.ts`, `services/ManifestValidator.ts`, `services/ManifestCommitter.ts` | Read/edit, validate, and land. |
-| Report | `report.ts` | Pure default-message and job-summary builders. |
-| Wiring | `layers/app.ts`, `state.ts` | `PreLive`/`MainLive`/`PostLive` layers; cross-phase start-time state (`src/state.ts:4-11`). |
+| Services | `services/ManifestEditor.ts`, `services/ManifestValidator.ts`, `services/ManifestCommitter.ts` | Read/edit, validate, and land — each taking the target `Marketplace` descriptor as a parameter rather than hardcoding a path. |
+| Report | `report.ts` | Pure default-message and job-summary builders, grouped by `(marketplace, name)` pair. |
+| Wiring | `layers/app.ts`, `state.ts` | `PreLive`/`MainLive`/`PostLive` layers; cross-phase start-time state. |
 
 ## Layer composition (`src/layers/app.ts`)
 
@@ -149,17 +171,19 @@ rather than silently do nothing.
 
 ## Landing (`src/services/ManifestCommitter.ts`)
 
-`land(params)` (`src/services/ManifestCommitter.ts:90-155`) owns the mode
-split. It never passes author, committer, or signature — see
+`land(params)` owns the mode split. `LandParams.changes` is a **non-empty
+array** of `ValidatedManifestChange` — one per touched manifest, not one
+manifest at a time — and `land` maps it straight to one `FileContent` per
+file, so a run that repins a plugin in both marketplaces still produces one
+tree and one commit (or one PR head move). It never passes author,
+committer, or signature — see
 [verified-commit](../glossary/verified-commit.md).
 
-- **commit mode** (`src/services/ManifestCommitter.ts:112-119`):
-  `commit.commitFiles({ branch: base, message, changes })` directly on the
-  base branch — `commitFiles` reads the base head as parent itself.
-  `changes` carries a `FileContent` instance, not a bare
-  `{ path, content }` literal.
-- **pr mode** (`src/services/ManifestCommitter.ts:122-147`) — the commit is
-  built before the ref moves:
+- **commit mode**: `commit.commitFiles({ branch: base, message, changes })`
+  directly on the base branch — `commitFiles` reads the base head as parent
+  itself. `changes` is the array of `FileContent` instances built from
+  every validated change, not a single `{ path, content }` literal.
+- **pr mode** — the commit is built before the ref moves:
   `branch.sha(base)` → `commit.get(baseSha)` →
   `commit.createTree({ changes, baseTree })` →
   `commit.createCommit({ message, tree, parents: [baseSha] })` →
@@ -189,15 +213,18 @@ for the consequence and
 for why the reset and the commit are a single ref move rather than
 reset-then-commit.
 
-`resolveBaseBranch(input)` (`src/services/ManifestCommitter.ts:43-44`)
+`resolveBaseBranch(input)` (`src/services/ManifestCommitter.ts`)
 returns the explicit `base-branch` input when set, otherwise resolves the
 repo's default branch via `GitHubRepository.defaultBranch`.
 
 ## Error taxonomy
 
-Three action-domain tagged errors in `src/errors/errors.ts`:
-`InvalidInputError` (`:4-11`), `PluginNotFoundError` (`:14-20`), and
-`ManifestValidationError` (`:23-29`).
+Four action-domain tagged errors in `src/errors/errors.ts`: `InvalidInputError`,
+`PluginNotFoundError`, `ManifestNotFoundError` (a patch targeted a
+marketplace whose fixed-path manifest is not in the checkout), and
+`ManifestValidationError`. The last three each carry `marketplace` and
+`path`, so a multi-manifest run's failure names which file and which
+marketplace it belongs to rather than only a plugin name.
 
 Library failures are collapsed at the port into a single **`GitHubError`**,
 which carries a structured `kind` (e.g. `"alreadyExists"`, `"notFound"`) so
