@@ -1,29 +1,41 @@
 import { describe, expect, it } from "vitest";
+import type { ChangeRecord } from "../../src/schema/marketplace.js";
+import type { ProjectionInput } from "../../src/schema/projections.js";
 import { toReportOutput } from "../../src/schema/projections.js";
 import { SCHEMA_URL } from "../../src/schema/report-output.js";
 
-const change = {
-	marketplace: "claude-code" as const,
-	path: ".claude-plugin/marketplace.json",
+const CLAUDE_PATH = ".claude-plugin/marketplace.json";
+const COPILOT_PATH = ".github/plugin/marketplace.json";
+
+/** A claude-code `sha` change to `p1`; override any field. */
+const record = (overrides: Partial<ChangeRecord> = {}): ChangeRecord => ({
+	marketplace: "claude-code",
+	path: CLAUDE_PATH,
 	pluginName: "p1",
 	manifestName: "acme",
-	field: "sha" as const,
+	field: "sha",
 	value: "s",
-};
+	...overrides,
+});
+
+/** A successful commit-mode run that landed nothing; override any field. */
+const project = (overrides: Partial<ProjectionInput> = {}) =>
+	toReportOutput({
+		mode: "commit",
+		dryRun: false,
+		changes: [],
+		commitSha: null,
+		commitUrl: null,
+		prNumber: null,
+		prUrl: null,
+		succeeded: true,
+		hasFailures: false,
+		...overrides,
+	});
 
 describe("toReportOutput", () => {
 	it("marks a no-op when nothing changed", () => {
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [],
-			commitSha: null,
-			commitUrl: null,
-			prNumber: null,
-			prUrl: null,
-			succeeded: true,
-			hasFailures: false,
-		});
+		const out = project();
 		expect(out.$schema).toBe(SCHEMA_URL);
 		// The version lives in the $schema URL's path; there is no in-band copy.
 		expect(Object.hasOwn(out, "schemaVersion")).toBe(false);
@@ -33,17 +45,7 @@ describe("toReportOutput", () => {
 	});
 
 	it("reports success with a commit sha", () => {
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [change],
-			commitSha: "abc",
-			commitUrl: "http://c",
-			prNumber: null,
-			prUrl: null,
-			succeeded: true,
-			hasFailures: false,
-		});
+		const out = project({ changes: [record()], commitSha: "abc", commitUrl: "http://c" });
 		expect(out.noop).toBe(false);
 		expect(out.succeeded).toBe(true);
 		expect(out.status).toBe("success");
@@ -52,32 +54,9 @@ describe("toReportOutput", () => {
 	});
 
 	it("groups multiple distinct plugins, preserving first-seen order and count", () => {
-		const changeB = {
-			marketplace: "claude-code" as const,
-			path: ".claude-plugin/marketplace.json",
-			pluginName: "b",
-			manifestName: "acme",
-			field: "sha" as const,
-			value: "s2",
-		};
-		const changeA = {
-			marketplace: "claude-code" as const,
-			path: ".claude-plugin/marketplace.json",
-			pluginName: "a",
-			manifestName: "acme",
-			field: "path" as const,
-			value: "./a",
-		};
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [changeB, changeA],
+		const out = project({
+			changes: [record({ pluginName: "b", value: "s2" }), record({ pluginName: "a", field: "path", value: "./a" })],
 			commitSha: "abc",
-			commitUrl: null,
-			prNumber: null,
-			prUrl: null,
-			succeeded: true,
-			hasFailures: false,
 		});
 		expect(out.pluginsUpdated).toBe(2);
 		expect(out.plugins.map((p) => p.name)).toEqual(["b", "a"]);
@@ -86,32 +65,9 @@ describe("toReportOutput", () => {
 	});
 
 	it("accumulates multiple fields for the same plugin into one entry", () => {
-		const shaChange = {
-			marketplace: "claude-code" as const,
-			path: ".claude-plugin/marketplace.json",
-			pluginName: "p1",
-			manifestName: "acme",
-			field: "sha" as const,
-			value: "s",
-		};
-		const pathChange = {
-			marketplace: "claude-code" as const,
-			path: ".claude-plugin/marketplace.json",
-			pluginName: "p1",
-			manifestName: "acme",
-			field: "path" as const,
-			value: "./p",
-		};
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [shaChange, pathChange],
+		const out = project({
+			changes: [record(), record({ field: "path", value: "./p" })],
 			commitSha: "abc",
-			commitUrl: null,
-			prNumber: null,
-			prUrl: null,
-			succeeded: true,
-			hasFailures: false,
 		});
 		expect(out.pluginsUpdated).toBe(1);
 		expect(out.plugins).toHaveLength(1);
@@ -120,17 +76,7 @@ describe("toReportOutput", () => {
 	});
 
 	it("reports the pr branch with pr populated and commit null", () => {
-		const out = toReportOutput({
-			mode: "pr",
-			dryRun: false,
-			changes: [change],
-			commitSha: null,
-			commitUrl: null,
-			prNumber: 42,
-			prUrl: "http://pr",
-			succeeded: true,
-			hasFailures: false,
-		});
+		const out = project({ mode: "pr", changes: [record()], prNumber: 42, prUrl: "http://pr" });
 		expect(out.mode).toBe("pr");
 		expect(out.status).toBe("success");
 		expect(out.commit).toBeNull();
@@ -138,17 +84,7 @@ describe("toReportOutput", () => {
 	});
 
 	it("reports status failed when succeeded is false and hasFailures is true", () => {
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [change],
-			commitSha: null,
-			commitUrl: null,
-			prNumber: null,
-			prUrl: null,
-			succeeded: false,
-			hasFailures: true,
-		});
+		const out = project({ changes: [record()], succeeded: false, hasFailures: true });
 		expect(out.status).toBe("failed");
 		expect(out.succeeded).toBe(false);
 		expect(out.hasFailures).toBe(true);
@@ -156,17 +92,7 @@ describe("toReportOutput", () => {
 	});
 
 	it("reports status failed with no changes when succeeded is false and hasFailures is true", () => {
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [],
-			commitSha: null,
-			commitUrl: null,
-			prNumber: null,
-			prUrl: null,
-			succeeded: false,
-			hasFailures: true,
-		});
+		const out = project({ succeeded: false, hasFailures: true });
 		expect(out.status).toBe("failed");
 		expect(out.succeeded).toBe(false);
 		expect(out.hasFailures).toBe(true);
@@ -174,51 +100,21 @@ describe("toReportOutput", () => {
 	});
 
 	it("keeps one name in two marketplaces as two entries and lists both manifests", () => {
-		const claude = {
-			marketplace: "claude-code" as const,
-			path: ".claude-plugin/marketplace.json",
-			pluginName: "effected",
-			manifestName: "spencerbeggs",
-			field: "sha" as const,
-			value: "s",
-		};
-		const copilot = { ...claude, marketplace: "copilot" as const, path: ".github/plugin/marketplace.json" };
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [claude, copilot, { ...copilot, field: "path" as const, value: "plugins/copilot" }],
+		const claude = record({ pluginName: "effected", manifestName: "spencerbeggs" });
+		const copilot = { ...claude, marketplace: "copilot" as const, path: COPILOT_PATH };
+		const out = project({
+			changes: [claude, copilot, { ...copilot, field: "path", value: "plugins/copilot" }],
 			commitSha: "abc",
-			commitUrl: null,
-			prNumber: null,
-			prUrl: null,
-			succeeded: true,
-			hasFailures: false,
 		});
 		expect(out.pluginsUpdated).toBe(2);
 		expect(out.plugins).toEqual([
-			{ marketplace: "claude-code", manifest: ".claude-plugin/marketplace.json", name: "effected", fields: ["sha"] },
-			{
-				marketplace: "copilot",
-				manifest: ".github/plugin/marketplace.json",
-				name: "effected",
-				fields: ["sha", "path"],
-			},
+			{ marketplace: "claude-code", manifest: CLAUDE_PATH, name: "effected", fields: ["sha"] },
+			{ marketplace: "copilot", manifest: COPILOT_PATH, name: "effected", fields: ["sha", "path"] },
 		]);
-		expect(out.manifests).toEqual([".claude-plugin/marketplace.json", ".github/plugin/marketplace.json"]);
+		expect(out.manifests).toEqual([CLAUDE_PATH, COPILOT_PATH]);
 	});
 
 	it("reports no manifests for a no-op", () => {
-		const out = toReportOutput({
-			mode: "commit",
-			dryRun: false,
-			changes: [],
-			commitSha: null,
-			commitUrl: null,
-			prNumber: null,
-			prUrl: null,
-			succeeded: true,
-			hasFailures: false,
-		});
-		expect(out.manifests).toEqual([]);
+		expect(project().manifests).toEqual([]);
 	});
 });

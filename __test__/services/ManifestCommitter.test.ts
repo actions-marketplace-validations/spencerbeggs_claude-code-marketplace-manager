@@ -2,79 +2,57 @@ import { assert, describe, it } from "@effect/vitest";
 import type { PullRequestInfo as PullRequestInfoType } from "@effected/github";
 import { GitBranch, GitCommit, PullRequest, PullRequestInfo, Repo, RepoRef } from "@effected/github";
 import { Effect, Layer, Option } from "effect";
+import type { Marketplace } from "../../src/marketplaces.js";
 import { CLAUDE_CODE, COPILOT } from "../../src/marketplaces.js";
 import { land } from "../../src/services/ManifestCommitter.js";
 import { validateEdit } from "../../src/services/ManifestValidator.js";
+
+const SHA0 = "0".repeat(40);
+const SHA1 = "1".repeat(40);
 
 const ORIGINAL = `{
 	"name": "acme",
 	"owner": { "name": "acme" },
 	"plugins": [
-		{ "name": "p1", "source": { "source": "git-subdir", "url": "https://github.com/acme/p1", "path": "plugin", "sha": "${"0".repeat(40)}" } }
+		{ "name": "p1", "source": { "source": "git-subdir", "url": "https://github.com/acme/p1", "path": "plugin", "sha": "${SHA0}" } }
 	]
 }
 `;
-const EDITED = ORIGINAL.replace("0".repeat(40), "1".repeat(40));
-
-// `land` accepts only a validator-minted ValidatedManifestChange, so the fixture
-// is minted through the real `validateEdit` rather than cast into place. A
-// fixture that stopped validating throws here instead of silently weakening
-// every test below.
-const change = Effect.runSync(
-	validateEdit(
-		CLAUDE_CODE,
-		{
-			original: ORIGINAL,
-			editedText: EDITED,
-			changed: true,
-			manifestName: "acme",
-			changes: [
-				{
-					marketplace: "claude-code",
-					path: ".claude-plugin/marketplace.json",
-					pluginName: "p1",
-					manifestName: "acme",
-					field: "sha",
-					value: "1".repeat(40),
-				},
-			],
-		},
-		["p1"],
-	),
-);
+const EDITED = ORIGINAL.replace(SHA0, SHA1);
 
 const COPILOT_ORIGINAL = `{
 	"name": "acme",
 	"owner": { "name": "acme" },
 	"plugins": [
-		{ "name": "p1", "source": { "source": "github", "repo": "acme/p1", "sha": "${"0".repeat(40)}" } }
+		{ "name": "p1", "source": { "source": "github", "repo": "acme/p1", "sha": "${SHA0}" } }
 	]
 }
 `;
-const COPILOT_EDITED = COPILOT_ORIGINAL.replace("0".repeat(40), "1".repeat(40));
+const COPILOT_EDITED = COPILOT_ORIGINAL.replace(SHA0, SHA1);
 
-const copilotChange = Effect.runSync(
-	validateEdit(
-		COPILOT,
-		{
-			original: COPILOT_ORIGINAL,
-			editedText: COPILOT_EDITED,
-			changed: true,
-			manifestName: "acme",
-			changes: [
-				{
-					marketplace: "copilot",
-					path: COPILOT.path,
-					pluginName: "p1",
-					manifestName: "acme",
-					field: "sha",
-					value: "1".repeat(40),
-				},
-			],
-		},
-		["p1"],
-	),
-);
+// `land` accepts only a validator-minted ValidatedManifestChange, so the fixture
+// is minted through the real `validateEdit` rather than cast into place. A
+// fixture that stopped validating throws here instead of silently weakening
+// every test below.
+const validated = (m: Marketplace, original: string, editedText: string) =>
+	Effect.runSync(
+		validateEdit(
+			m,
+			{
+				original,
+				editedText,
+				changed: true,
+				manifestName: "acme",
+				changes: [
+					{ marketplace: m.id, path: m.path, pluginName: "p1", manifestName: "acme", field: "sha", value: SHA1 },
+				],
+			},
+			["p1"],
+		),
+	);
+
+const change = validated(CLAUDE_CODE, ORIGINAL, EDITED);
+const copilotChange = validated(COPILOT, COPILOT_ORIGINAL, COPILOT_EDITED);
 
 const params = {
 	base: "main",

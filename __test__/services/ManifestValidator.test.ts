@@ -10,11 +10,15 @@ const VALID_SOURCE = {
 	sha: "a".repeat(40),
 } as const;
 
-const good = JSON.stringify({
-	name: "acme",
-	owner: { name: "Acme" },
-	plugins: [{ name: "p1", source: VALID_SOURCE }],
-});
+/** A structurally valid manifest whose one plugin, `p1`, carries `source`. */
+const manifestWith = (source: unknown): string =>
+	JSON.stringify({
+		name: "acme",
+		owner: { name: "Acme" },
+		plugins: [{ name: "p1", source }],
+	});
+
+const good = manifestWith(VALID_SOURCE);
 
 /**
  * A manifest that is structurally valid in every respect except the one field
@@ -30,12 +34,7 @@ const good = JSON.stringify({
  * deleted from the source. Every negative case below asserts the error text,
  * not merely that something failed.
  */
-const withSource = (overrides: Record<string, unknown>): string =>
-	JSON.stringify({
-		name: "acme",
-		owner: { name: "Acme" },
-		plugins: [{ name: "p1", source: { ...VALID_SOURCE, ...overrides } }],
-	});
+const withSource = (overrides: Record<string, unknown>): string => manifestWith({ ...VALID_SOURCE, ...overrides });
 
 /** Fail `manifest`, assert the tag, and hand back the reasons. */
 const reasons = (manifest: string, patched: ReadonlyArray<string>, m = CLAUDE_CODE) =>
@@ -45,6 +44,16 @@ const reasons = (manifest: string, patched: ReadonlyArray<string>, m = CLAUDE_CO
 		assert.strictEqual(error.marketplace, m.id);
 		assert.strictEqual(error.path, m.path);
 		return error.errors;
+	});
+
+/** Fail `manifest` and assert some reason contains `needle`. */
+const rejects = (manifest: string, patched: ReadonlyArray<string>, needle: string, m = CLAUDE_CODE) =>
+	Effect.gen(function* () {
+		const errors = yield* reasons(manifest, patched, m);
+		assert.isTrue(
+			errors.some((e) => e.includes(needle)),
+			`expected a reason containing ${JSON.stringify(needle)}, got ${JSON.stringify(errors)}`,
+		);
 	});
 
 describe("validateManifest", () => {
@@ -59,67 +68,34 @@ describe("validateManifest", () => {
 
 	describe("per-plugin rules, on an otherwise valid manifest", () => {
 		it.effect("rejects a non-40-hex sha", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(withSource({ sha: "zzz" }), ["p1"]);
-				assert.isTrue(
-					errors.some((e) => e.includes("source.sha must be 40-hex lowercase")),
-					`expected a sha reason, got ${JSON.stringify(errors)}`,
-				);
-			}),
+			rejects(withSource({ sha: "zzz" }), ["p1"], "source.sha must be 40-hex lowercase"),
 		);
 
 		it.effect("rejects an uppercase sha", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(withSource({ sha: "A".repeat(40) }), ["p1"]);
-				assert.isTrue(errors.some((e) => e.includes("source.sha must be 40-hex lowercase")));
-			}),
+			rejects(withSource({ sha: "A".repeat(40) }), ["p1"], "source.sha must be 40-hex lowercase"),
 		);
 
 		// The host guard. Without it a patch can re-point a plugin at any origin
 		// the runner can reach, which is the one semantic rule here with a
 		// security consequence rather than a correctness one.
 		it.effect("rejects a non-GitHub url", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(withSource({ url: "https://evil.example.com/acme/p1" }), ["p1"]);
-				assert.isTrue(
-					errors.some((e) => e.includes("source.url must be a GitHub URL")),
-					`expected a url reason, got ${JSON.stringify(errors)}`,
-				);
-			}),
+			rejects(withSource({ url: "https://evil.example.com/acme/p1" }), ["p1"], "source.url must be a GitHub URL"),
 		);
 
 		it.effect("rejects a github.com lookalike host", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(withSource({ url: "https://github.com.evil.test/acme/p1" }), ["p1"]);
-				assert.isTrue(errors.some((e) => e.includes("source.url must be a GitHub URL")));
-			}),
+			rejects(withSource({ url: "https://github.com.evil.test/acme/p1" }), ["p1"], "source.url must be a GitHub URL"),
 		);
 
 		it.effect("rejects a plain-http GitHub url", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(withSource({ url: "http://github.com/acme/p1" }), ["p1"]);
-				assert.isTrue(errors.some((e) => e.includes("source.url must be a GitHub URL")));
-			}),
+			rejects(withSource({ url: "http://github.com/acme/p1" }), ["p1"], "source.url must be a GitHub URL"),
 		);
 
 		it.effect("rejects an empty path", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(withSource({ path: "" }), ["p1"]);
-				assert.isTrue(
-					errors.some((e) => e.includes("source.path must be non-empty")),
-					`expected a path reason, got ${JSON.stringify(errors)}`,
-				);
-			}),
+			rejects(withSource({ path: "" }), ["p1"], "source.path must be non-empty"),
 		);
 
 		it.effect("rejects a source kind other than git-subdir", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(withSource({ source: "github-release" }), ["p1"]);
-				assert.isTrue(
-					errors.some((e) => e.includes('source.source must be "git-subdir"')),
-					`expected a source-kind reason, got ${JSON.stringify(errors)}`,
-				);
-			}),
+			rejects(withSource({ source: "github-release" }), ["p1"], 'source.source must be "git-subdir"'),
 		);
 	});
 
@@ -137,13 +113,7 @@ describe("validateManifest", () => {
 	);
 
 	it.effect("rejects a patched name that is absent", () =>
-		Effect.gen(function* () {
-			const errors = yield* reasons(good, ["ghost"]);
-			assert.isTrue(
-				errors.some((e) => e.includes("patched plugin not present after edit: ghost")),
-				`expected an absent-name reason, got ${JSON.stringify(errors)}`,
-			);
-		}),
+		rejects(good, ["ghost"], "patched plugin not present after edit: ghost"),
 	);
 
 	it.effect("rejects text that is not JSON at all", () =>
@@ -178,112 +148,77 @@ const COPILOT_SOURCE = {
 	sha: "a".repeat(40),
 } as const;
 
-/** A Copilot manifest valid in every respect except the plugin's source overrides. */
-const copilotWith = (source: unknown): string =>
-	JSON.stringify({
-		name: "acme",
-		owner: { name: "Acme" },
-		plugins: [{ name: "p1", source }],
-	});
-
 describe("validateManifest (copilot)", () => {
 	it.effect("accepts a well-formed github source", () =>
-		validateManifest(COPILOT, copilotWith(COPILOT_SOURCE), ["p1"]),
+		validateManifest(COPILOT, manifestWith(COPILOT_SOURCE), ["p1"]),
 	);
 
 	it.effect("accepts a github source without a path", () =>
-		validateManifest(COPILOT, copilotWith({ source: "github", repo: "acme/p1", sha: "a".repeat(40) }), ["p1"]),
+		validateManifest(COPILOT, manifestWith({ source: "github", repo: "acme/p1", sha: "a".repeat(40) }), ["p1"]),
 	);
 
 	it.effect("accepts a github source that also carries a ref", () =>
-		validateManifest(COPILOT, copilotWith({ ...COPILOT_SOURCE, ref: "v1.0.0" }), ["p1"]),
+		validateManifest(COPILOT, manifestWith({ ...COPILOT_SOURCE, ref: "v1.0.0" }), ["p1"]),
 	);
 
 	describe("structural", () => {
 		it.effect("rejects a manifest without owner", () =>
-			Effect.gen(function* () {
-				const manifest = JSON.stringify({ name: "acme", plugins: [{ name: "p1", source: COPILOT_SOURCE }] });
-				const errors = yield* reasons(manifest, ["p1"], COPILOT);
-				assert.isTrue(
-					errors.some((e) => e.includes("owner")),
-					JSON.stringify(errors),
-				);
-			}),
+			rejects(
+				JSON.stringify({ name: "acme", plugins: [{ name: "p1", source: COPILOT_SOURCE }] }),
+				["p1"],
+				"owner",
+				COPILOT,
+			),
 		);
 
 		it.effect("rejects a plugin without source", () =>
-			Effect.gen(function* () {
-				const manifest = JSON.stringify({ name: "acme", owner: { name: "Acme" }, plugins: [{ name: "p1" }] });
-				const errors = yield* reasons(manifest, [], COPILOT);
-				assert.isTrue(
-					errors.some((e) => e.includes("source")),
-					JSON.stringify(errors),
-				);
-			}),
+			rejects(
+				JSON.stringify({ name: "acme", owner: { name: "Acme" }, plugins: [{ name: "p1" }] }),
+				[],
+				"source",
+				COPILOT,
+			),
 		);
 	});
 
 	describe("semantic, on an otherwise valid manifest", () => {
 		it.effect("rejects a bare path-string source on a patched entry", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(copilotWith("plugins/p1"), ["p1"], COPILOT);
-				assert.isTrue(
-					errors.some((e) => e.includes('source.source must be "github"')),
-					JSON.stringify(errors),
-				);
-			}),
+			rejects(manifestWith("plugins/p1"), ["p1"], 'source.source must be "github"', COPILOT),
 		);
 
 		it.effect("rejects a url source on a patched entry", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(
-					copilotWith({ source: "url", url: "https://example.com/p.tgz", sha: "a".repeat(40) }),
-					["p1"],
-					COPILOT,
-				);
-				assert.isTrue(
-					errors.some((e) => e.includes('source.source must be "github"')),
-					JSON.stringify(errors),
-				);
-			}),
+			rejects(
+				manifestWith({ source: "url", url: "https://example.com/p.tgz", sha: "a".repeat(40) }),
+				["p1"],
+				'source.source must be "github"',
+				COPILOT,
+			),
 		);
 
 		it.effect("rejects a repo that is not owner/name", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(
-					copilotWith({ ...COPILOT_SOURCE, repo: "https://github.com/acme/p1" }),
-					["p1"],
-					COPILOT,
-				);
-				assert.isTrue(
-					errors.some((e) => e.includes("source.repo must be owner/name")),
-					JSON.stringify(errors),
-				);
-			}),
+			rejects(
+				manifestWith({ ...COPILOT_SOURCE, repo: "https://github.com/acme/p1" }),
+				["p1"],
+				"source.repo must be owner/name",
+				COPILOT,
+			),
 		);
 
 		it.effect("rejects an empty path when present", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(copilotWith({ ...COPILOT_SOURCE, path: "" }), ["p1"], COPILOT);
-				assert.isTrue(
-					errors.some((e) => e.includes("source.path must be non-empty when present")),
-					JSON.stringify(errors),
-				);
-			}),
+			rejects(
+				manifestWith({ ...COPILOT_SOURCE, path: "" }),
+				["p1"],
+				"source.path must be non-empty when present",
+				COPILOT,
+			),
 		);
 
 		it.effect("rejects a non-40-hex sha", () =>
-			Effect.gen(function* () {
-				const errors = yield* reasons(copilotWith({ ...COPILOT_SOURCE, sha: "abc" }), ["p1"], COPILOT);
-				assert.isTrue(
-					errors.some((e) => e.includes("source.sha must be 40-hex lowercase")),
-					JSON.stringify(errors),
-				);
-			}),
+			rejects(manifestWith({ ...COPILOT_SOURCE, sha: "abc" }), ["p1"], "source.sha must be 40-hex lowercase", COPILOT),
 		);
 
 		it.effect("ignores an untouched string-source entry", () =>
-			validateManifest(COPILOT, copilotWith("plugins/p1"), []),
+			validateManifest(COPILOT, manifestWith("plugins/p1"), []),
 		);
 	});
 });

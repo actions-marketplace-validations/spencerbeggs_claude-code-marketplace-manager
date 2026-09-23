@@ -4,6 +4,10 @@ import { decodeJsonInput } from "../../src/schema/input.js";
 
 const SHA = "1".repeat(40);
 
+/** Decode a one-patch envelope: a copilot repin of `a`, extended by `extra`. */
+const decodeCopilot = (extra: Record<string, unknown>) =>
+	decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, ...extra }] });
+
 describe("json input schema", () => {
 	it.effect("decodes a plugins envelope of v2 patches", () =>
 		Effect.gen(function* () {
@@ -59,31 +63,25 @@ describe("json input schema", () => {
 
 	it.effect("rejects an absolute or empty path", () =>
 		Effect.gen(function* () {
-			yield* Effect.flip(decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "/abs" }] }));
-			yield* Effect.flip(decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "" }] }));
+			yield* Effect.flip(decodeCopilot({ path: "/abs" }));
+			yield* Effect.flip(decodeCopilot({ path: "" }));
 		}),
 	);
 
 	it.effect("rejects a path carrying a control character, a `..` segment, or a backslash", () =>
 		Effect.gen(function* () {
-			yield* Effect.flip(
-				decodeJsonInput({
-					plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "\nCo-authored-by: x" }],
-				}),
-			);
-			yield* Effect.flip(
-				decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "a/../b" }] }),
-			);
-			yield* Effect.flip(decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: ".." }] }));
-			yield* Effect.flip(decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "a\\b" }] }));
+			yield* Effect.flip(decodeCopilot({ path: "\nCo-authored-by: x" }));
+			yield* Effect.flip(decodeCopilot({ path: "a/../b" }));
+			yield* Effect.flip(decodeCopilot({ path: ".." }));
+			yield* Effect.flip(decodeCopilot({ path: "a\\b" }));
 		}),
 	);
 
 	it.effect("accepts an ordinary relative path, including a leading-dot segment that is not `..`", () =>
 		Effect.gen(function* () {
-			yield* decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "plugins/copilot" }] });
-			yield* decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "plugin" }] });
-			yield* decodeJsonInput({ plugins: [{ name: "a", marketplace: "copilot", sha: SHA, path: "a/.b/c" }] });
+			yield* decodeCopilot({ path: "plugins/copilot" });
+			yield* decodeCopilot({ path: "plugin" });
+			yield* decodeCopilot({ path: "a/.b/c" });
 		}),
 	);
 
