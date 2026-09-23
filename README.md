@@ -213,7 +213,7 @@ Read a scalar in a later step:
 - **Validation before landing.** Each edited manifest is validated (ajv structural checks plus semantic checks) before anything is committed. Claude Code entries must be `git-subdir` sources; Copilot entries must be `github` sources (a bare path string or any other `source.source` fails validation).
 - **One commit, both files.** When a run touches both manifests, both land in the same commit (or the same PR head move) — never two separate commits.
 - **No-op safety.** When the requested changes leave every targeted manifest byte-for-byte unchanged, the run reports `status: no-op` and makes no commit or PR.
-- **Generated messages.** With `commit-message`, `pr-title`, and `pr-body` unset, the default subject identifies changes by `(marketplace, name)` pair: `ai(marketplace): repinned effected@claude-code (claude-code)` for one pair, `ai(marketplace): repinned effected@claude-code (claude-code, copilot)` when the same name changed in both marketplaces, or `ai(marketplace): repinned N plugins` otherwise — with a DCO `Signed-off-by:` trailer from the App bot.
+- **Generated messages.** With `commit-message`, `pr-title`, and `pr-body` unset, the default subject identifies changes by `(marketplace, name)` pair, using `<plugin name>@<manifest name>` (the manifest's own top-level `name` field, not the marketplace id) as the reference: `ai(marketplace): repinned effected@spencerbeggs (copilot)` for one pair, `ai(marketplace): repinned effected@spencerbeggs (claude-code, copilot)` when the same plugin changed in both marketplaces, or `ai(marketplace): repinned N plugins` otherwise — with a DCO `Signed-off-by:` trailer from the App bot.
 - **Dry run.** `dry-run: true` runs the full edit and validation for every targeted manifest and populates the outputs, but writes no commit or PR.
 - **Auto-merge.** In `pr` mode, the opened (or reused) PR has auto-merge enabled with the `auto-merge` method (default `rebase`) via GitHub's native auto-merge — the PR still merges only once required checks and reviews pass. Auto-merge is applied as a separate step after the pull request is opened or updated, so a repository that refuses the requested merge method still gets its pull request. Re-running the action against the same open PR re-applies auto-merge with the current method. Has no effect in `commit` mode.
 
@@ -269,12 +269,12 @@ Open a pull request with a specific auto-merge method:
 
 v1 edited only the Claude Code manifest. v2 adds GitHub Copilot support and changes the contract:
 
-- **Rename the `uses:` reference** from `spencerbeggs/claude-code-marketplace-manager@v1` to `spencerbeggs/ai-plugin-marketplace-manager@v2`. `v1` keeps working (it targets the same code, and GitHub's repository rename keeps the old name resolving), but new workflows should move to `@v2`.
+- **Rename the `uses:` reference** from `spencerbeggs/claude-code-marketplace-manager@v1` to `spencerbeggs/ai-plugin-marketplace-manager@v2`. The `v1` tag itself doesn't move, and the old repository name keeps resolving through GitHub's repository-rename redirect, so `@v1` keeps working — but new workflows should move to `@v2`.
 - **`url` is removed.** There is no more `source.url` repinning on either path; only `path` and `sha` can be changed.
 - **`marketplace` is now required on every patch**, manual or `json`. An existing Claude-only `json` payload needs `"marketplace": "claude-code"` added to every entry; the manual path needs the new `marketplace` input wired up alongside `name` and `sha`.
 - **`sha` is required on the manual path** (it was optional in v1, where `name` plus any one of `url`/`path`/`sha` was enough).
 - **`result` moved to `schemas/2.0/output.json`.** The in-band `schemaVersion` field was removed — the version now lives only in the `$schema` URL's `schemas/<version>/` path. `plugins[]` entries gained `marketplace` and `manifest` fields (grouping is now by `(marketplace, name)` pair, not name alone), and a new top-level `manifests[]` array lists every file the run touched.
-- **`schemas/1.0/`** (the v1 input/output documents) stays committed at its original URL — `https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/1.0/output.json` — served through GitHub's repository-rename redirect, so any code still validating against the v1 schema keeps working.
+- **`schemas/1.0/`** (the v1 input/output documents) stays committed at its original URL — `https://raw.githubusercontent.com/spencerbeggs/claude-code-marketplace-manager/main/schemas/1.0/output.json`, matching the `$id` baked into the committed file — served through GitHub's repository-rename redirect, so any code still validating against the v1 schema keeps working.
 
 ## Requirements
 
