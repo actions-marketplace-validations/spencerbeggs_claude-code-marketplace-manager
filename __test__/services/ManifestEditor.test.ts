@@ -136,7 +136,8 @@ const COPILOT_MANIFEST = `{
 				"path": "plugins/copilot"
 			}
 		},
-		{ "name": "p2", "source": { "source": "github", "repo": "acme/p2", "sha": "${"0".repeat(40)}" } }
+		{ "name": "p2", "source": { "source": "github", "repo": "acme/p2", "sha": "${"0".repeat(40)}" } },
+		{ "name": "p3", "source": "plugins/p3" }
 	]
 }
 `;
@@ -188,6 +189,22 @@ describe("applyPatches (copilot)", () => {
 			}
 			assert.strictEqual(error.marketplace, "copilot");
 			assert.strictEqual(error.path, ".github/plugin/marketplace.json");
+		}),
+	);
+
+	// p3's source is a bare path string — structurally valid, but not
+	// pinnable: there is no `source.<field>` to write a sha or path into.
+	// This must fail readably, naming the marketplace/manifest/plugin, rather
+	// than as a JsoncModifier path-only error.
+	it.effect("fails with a readable ManifestValidationError for a bare-string source", () =>
+		Effect.gen(function* () {
+			const error = yield* Effect.flip(applyPatches(COPILOT, COPILOT_MANIFEST, [{ name: "p3", sha: "1".repeat(40) }]));
+			if (error._tag !== "ManifestValidationError") {
+				return assert.fail(error._tag);
+			}
+			assert.strictEqual(error.marketplace, "copilot");
+			assert.strictEqual(error.path, COPILOT.path);
+			assert.include(error.errors, 'p3: source.source must be "github"');
 		}),
 	);
 });

@@ -55,6 +55,10 @@ const currentValue = (parsed: unknown, index: number, field: "path" | "sha"): st
 	return typeof value === "string" ? value : undefined;
 };
 
+/** Read the current `source` value for a plugin, unnarrowed. */
+const currentSource = (parsed: unknown, index: number): unknown =>
+	(parsed as { plugins?: Array<{ source?: unknown }> }).plugins?.[index]?.source;
+
 /**
  * Apply patches to marketplace `m`'s manifest text, format-preservingly. Only
  * provided fields whose value actually differs are written. Returns the edited
@@ -94,6 +98,24 @@ export const applyPatches = (
 			const index = names.indexOf(patch.name);
 			if (index === -1) {
 				return yield* Effect.fail(new PluginNotFoundError({ marketplace: m.id, path: m.path, name: patch.name }));
+			}
+			// A bare-string `source` (Copilot's unpinnable shorthand form) is
+			// structurally valid but has no `source.<field>` to write into.
+			// Without this check, `JsoncModifier.modify` would fail with a
+			// path-only `JsoncModificationError` naming neither the marketplace,
+			// the manifest nor the plugin. Reuse the descriptor's `sourceErrors`
+			// so the message matches what `validateEdit` would report for the
+			// same entry — object sources never trip this, so `modify` below
+			// still owns every other `JsoncModificationError`.
+			const source = currentSource(parsed, index);
+			if (typeof source !== "object" || source === null || Array.isArray(source)) {
+				return yield* Effect.fail(
+					new ManifestValidationError({
+						marketplace: m.id,
+						path: m.path,
+						errors: [...m.sourceErrors(patch.name, source)],
+					}),
+				);
 			}
 			for (const field of FIELDS) {
 				const next = patch[field];

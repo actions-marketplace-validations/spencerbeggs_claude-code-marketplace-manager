@@ -50,6 +50,21 @@ const setup = (copilot = true) => {
 };
 
 /**
+ * A checkout with ONLY the Copilot manifest — no `.claude-plugin/` at all.
+ *
+ * @remarks
+ * Pins "only manifests some patch targets are read": a copilot-only patch
+ * against this checkout can succeed only if `runOrchestration` never reads
+ * `.claude-plugin/marketplace.json` for a run that never targets it.
+ */
+const setupCopilotOnly = () => {
+	const dir = mkdtempSync(join(tmpdir(), "mm-"));
+	mkdirSync(join(dir, ".github/plugin"), { recursive: true });
+	writeFileSync(join(dir, ".github/plugin/marketplace.json"), COPILOT_MANIFEST);
+	return dir;
+};
+
+/**
  * Run `program` against fixture inputs and a fixture checkout.
  *
  * The landing services are provided as **bare `layerTest()` doubles with no
@@ -403,6 +418,20 @@ describe("program", () => {
 		}),
 	);
 
+	it.effect("a copilot-only checkout succeeds without a Claude manifest present", () =>
+		Effect.gen(function* () {
+			const h = withLandingProgram(
+				{ name: "p1", marketplace: "copilot", sha: SHA1, "base-branch": "main" },
+				setupCopilotOnly(),
+			);
+			yield* h.run;
+			assert.deepStrictEqual(
+				h.commits.map((c) => c.paths),
+				[[".github/plugin/marketplace.json"]],
+			);
+		}),
+	);
+
 	it.effect("a missing targeted manifest fails the run and lands nothing", () =>
 		Effect.gen(function* () {
 			// Bare doubles: any landing call would die.
@@ -427,17 +456,11 @@ describe("program", () => {
 	);
 
 	// p2's source is a bare path string: structurally allowed, not pinnable.
-	// `applyPatches` fails while modifying the string node — `JsoncModifier`
-	// rejects writing a `source.sha` key path into a value that is a plain
-	// string, not an object — so the validator's "source.source must be
-	// \"github\"" message is never reached. Per the brief's pre-ruled
-	// fallback: keep the failure/no-landing assertions and adapt the message
-	// check to what actually fires. The rendered `JsoncModificationError`
-	// message is `Modification failed at path [plugins, 1, source, sha]:
-	// expected object at depth 4` — it names the path, not the plugin, so a
-	// literal `"p2"` substring (the brief's suggested text) does not appear;
-	// asserting the error tag proves the write-time failure fired, which is
-	// the property this test needs.
+	// `applyPatches` now rejects a bare-string source before attempting any
+	// JSONC write (round-1 review fix), reusing the descriptor's
+	// `sourceErrors` so the message reads the same as the validator's own
+	// "source.source must be..." — readable, naming the plugin, rather than
+	// the JsoncModifier's path-only error.
 	it.effect("an invalid copilot edit lands nothing, even when the claude edit is valid", () =>
 		Effect.gen(function* () {
 			const h = withProgram(
@@ -452,7 +475,7 @@ describe("program", () => {
 			);
 			const exit = yield* Effect.exit(h.run);
 			assert.isTrue(Exit.isFailure(exit));
-			assert.include(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", "JsoncModificationError");
+			assert.include(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", 'p2: source.source must be "github"');
 			assert.strictEqual(outputValue(h.recorded, "status"), "failed");
 		}),
 	);
