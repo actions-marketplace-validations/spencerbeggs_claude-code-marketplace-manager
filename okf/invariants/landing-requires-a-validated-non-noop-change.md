@@ -19,8 +19,8 @@ sources:
     resource: ../../src/program.ts
 generated:
   by: okfit/claude-code
-  at: 2026-09-23T20:44:15Z
-  body_sha256: ad9f7b9c91eb90187563bf3e679bb96711e228df58f21b41343eee9f80b9dceb
+  at: 2026-09-23T21:08:46Z
+  body_sha256: 5ca6b0e4fe29a0aa3ef76ff3c6ba5d9dd2c363eee2a0430a912e64d1da812919
 ---
 
 # Landing requires a non-empty array of validated, non-no-op changes
@@ -59,8 +59,8 @@ narrows to that non-empty type with `Arr.isReadonlyArrayNonEmpty(validated)`
 before calling `land`; if every targeted manifest turned out byte-stable,
 `validated` stays empty, the narrowing fails, and the run emits a `noop`
 result and returns without ever reaching `land`. There is no other
-constructor for the brand in this codebase and no other way to produce a
-non-empty array from a possibly-empty one, so a caller that skips either
+constructor for the brand in this codebase and no other way to produce it
+from the loop's accumulator, so a caller that skips either
 guard has no value of the right type to hand `land` — the compiler rejects
 the call before any runtime guard would need to.
 

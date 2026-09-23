@@ -18,8 +18,8 @@ sources:
     title: "Identity and §4 Schema hosting across the rename"
 generated:
   by: okfit/claude-code
-  at: 2026-09-23T20:44:15Z
-  body_sha256: c4781f8dd071f673fad8f626be884c0deee36d8b61b26cdc904532457d7ecfa4
+  at: 2026-09-23T21:08:46Z
+  body_sha256: de00610d5378f98c679e0b8f19ed9dcfb8c68175489bd62514557b604b199fb9
 ---
 
 # Repository renamed at v2; schema hosting restarts at 2.0
@@ -60,9 +60,14 @@ Two parts:
    their original URLs
    (`https://raw.githubusercontent.com/spencerbeggs/claude-code-marketplace-manager/main/schemas/1.0/output.json`
    and the `input.json` sibling) through GitHub's repository-rename
-   redirect, which is expected — not yet independently verified against
-   `raw.githubusercontent.com`'s specific behavior — to continue resolving
-   requests made against the old repository name.
+   redirect. The reviewer probed the general mechanism against an
+   independent, already-renamed repository: `curl -I
+   https://raw.githubusercontent.com/zeit/next.js/canary/package.json`
+   returns `200` after the `zeit` → `vercel` owner rename, confirming
+   `raw.githubusercontent.com` does honor a repository/owner rename
+   redirect. A direct check of *this* repository's own `1.0` URLs is still
+   owed — it can only happen once the actual rename has occurred, and is
+   the step to run right after that rename, before tagging `v2`.
 
 ## Alternatives rejected
 

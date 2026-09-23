@@ -38,8 +38,8 @@ duplicates.
 carries `marketplace` and `manifest` alongside `name` and `fields`, and the
 result adds a top-level `manifests[]` listing every manifest file the run
 touched (or would touch, in dry-run). `pluginsUpdated` now counts distinct
-`(marketplace, name)` pairs. Commit subjects also name the marketplace they
-repinned.
+`(marketplace, name)` pairs. Commit subjects for a single plugin also name its
+marketplace(s).
 
 ## Features
 

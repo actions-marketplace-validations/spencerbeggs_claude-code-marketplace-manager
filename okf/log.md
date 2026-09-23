@@ -1,5 +1,18 @@
 # Log
 
+## 2026-09-23
+
+* Updated Action Contract
+* Updated Effect Schemas
+* Added Fixed manifest paths per marketplace, no discovery
+* Added Multi-marketplace repins land as one commit, not one per file
+* Added Schema.NonEmptyArray looks safe here and fails the ajv strict gate
+* Updated ai-plugin-marketplace-manager
+* Added marketplace looks like a manual-path signal and isn't
+* Updated marketplace-manager
+* Updated savvy-web/systems
+* Updated spencerbeggs/bot
+
 ## 2026-09-17
 
 * Updated Action Contract

@@ -7,8 +7,8 @@ resource: ../../schemas/2.0/output.json
 status: stable
 generated:
   by: okfit/claude-code
-  at: 2026-09-23T20:44:15Z
-  body_sha256: a9ae40c7a4ddaa85cc7ee3c965cc6b2f92bd83271449a4897d5373f7d425b949
+  at: 2026-09-23T21:08:46Z
+  body_sha256: f7a2a335c6d882f5f8431e3767a5e6e58f11474dbf76256351434cecadfc5ece
 tags:
   - architecture
   - observability
@@ -117,11 +117,13 @@ manifest, identifying each change by `(marketplace, name)`:
 
 - `commitSubject` — three shapes. One `(marketplace, name)` pair:
   `ai(marketplace): repinned effected@spencerbeggs (copilot)`. One plugin
-  name repinned across every marketplace the run touched (the usual
-  monorepo release, where "repinned 2 plugins" would hide that it is one
-  plugin): `ai(marketplace): repinned effected@spencerbeggs (claude-code,
-  copilot)`. Otherwise: `ai(marketplace): repinned N plugins`, N counting
-  pairs (`src/report.ts`).
+  name repinned across every marketplace the run touched, **and** every one
+  of those manifests shares the same `name`, (the usual monorepo release,
+  where "repinned 2 plugins" would hide that it is one plugin):
+  `ai(marketplace): repinned effected@spencerbeggs (claude-code, copilot)`.
+  Otherwise — including the same plugin `name` repinned in manifests whose
+  own `name` field differs between marketplaces — `ai(marketplace): repinned
+  N plugins`, N counting pairs (`src/report.ts`).
 - `messageBody` — one bullet per changed field, per pair, prefixed with the
   marketplace: `- [copilot] pinned effected@spencerbeggs to <sha>`,
   `- [claude-code] changed path of effected@spencerbeggs to <path>`

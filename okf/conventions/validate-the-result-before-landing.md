@@ -6,8 +6,8 @@ description: Validate the edited manifest before any commit, fail with all reaso
 stale_after: 2027-03-13T00:00:00Z
 generated:
   by: okfit/claude-code
-  at: 2026-09-13T21:33:34Z
-  body_sha256: 09d7354b675f02e2e094cff23a9978b7dd5695675e5bd7940a4b05be9e131ae9
+  at: 2026-09-23T21:08:46Z
+  body_sha256: 618b94de7f003bde0c7e025ea423d70a3c61ba42b3a89d724d7667e6a1d182ac
 tags:
   - validation
   - security
@@ -16,6 +16,8 @@ sources:
     resource: ../../src/services/ManifestValidator.ts
   - id: program
     resource: ../../src/program.ts
+  - id: marketplaces
+    resource: ../../src/marketplaces.ts
   - id: manifest-validator-test
     resource: ../../__test__/services/ManifestValidator.test.ts
 ---
@@ -41,28 +43,39 @@ unvalidated or byte-stable string cannot reach the commit path — the
 type checker enforces the ordering that would otherwise be a convention to
 remember.[^manifest-validator]
 
-Validation itself runs in two layers, in this order:[^manifest-validator]
+Validation itself runs in two layers, in this order, against whichever
+marketplace descriptor (`src/marketplaces.ts`'s `CLAUDE_CODE` or `COPILOT`)
+the edit targeted:[^manifest-validator][^marketplaces]
 
-1. **Structural** — parse with `@effected/jsonc`, then run the bundled
-   `src/schema/claude-code-marketplace.json` SchemaStore schema through ajv.
+1. **Structural** — parse with `@effected/jsonc`, then run that marketplace's
+   own bundled schema through ajv: `src/schema/claude-code-marketplace.json`
+   (the SchemaStore document) for `claude-code`, or the hand-authored
+   `src/schema/copilot-marketplace.json` for `copilot`.
 2. **Semantic**, scoped to the plugins this run actually touched, so an
    untouched entry already in the manifest is never retroactively rejected:
    - plugin names are unique across the whole manifest;
    - every patched name is still present after the edit;
-   - for each touched plugin: `source.source === "git-subdir"`; `source.url`
-     is an `https://github.com/<owner>/<repo>` URL, optionally with a `.git`
-     suffix and a trailing slash; `source.path` is non-empty; `source.sha` is
-     40 lowercase hex characters.
+   - for each touched plugin, the descriptor's own `sourceErrors` rule: a
+     Claude Code entry's `source.source` must be `"git-subdir"`, its
+     `source.url` an `https://github.com/<owner>/<repo>` URL (optionally
+     with a `.git` suffix and a trailing slash), and its `source.path`
+     non-empty; a Copilot entry's `source.source` must be `"github"` and its
+     `source.repo` an `owner/name` string (`source.path`, when present, must
+     be non-empty); both kinds require `source.sha` to be 40 lowercase hex
+     characters.
 
-The URL rule carries a security consequence beyond correctness: without it, a
-patch could re-point a plugin's source at any origin the runner can reach,
-not only GitHub — so it is the one semantic rule checked from three
-directions in tests: a foreign host, a `github.com`-lookalike host, and a
-plain `http://` GitHub URL.[^manifest-validator-test]
+The URL/repo rule carries a security consequence beyond correctness: without
+it, a patch could re-point a Claude Code plugin's source at any origin the
+runner can reach (not only GitHub), or a Copilot plugin at a source other
+than a `github` repo — so it is the one semantic rule checked from several
+directions in tests: for Claude Code, a foreign host, a `github.com`-lookalike
+host, and a plain `http://` GitHub URL; for Copilot, a bare-string source, a
+`url`-kind source, and a `repo` that isn't `owner/name`.[^manifest-validator-test]
 
-[^program]: ../../src/program.ts:66-97
-[^manifest-validator]: ../../src/services/ManifestValidator.ts:12-13,60-127
-[^manifest-validator-test]: ../../**test**/services/ManifestValidator.test.ts:78-100
+[^program]: ../../src/program.ts:76-98
+[^manifest-validator]: ../../src/services/ManifestValidator.ts:14-42,49-70
+[^marketplaces]: ../../src/marketplaces.ts:44-81
+[^manifest-validator-test]: ../../**test**/services/ManifestValidator.test.ts:81-103,226-288
 
 See [ajv strict:false](../decisions/ajv-strict-false.md) for why the
 structural pass runs with `strict: false`, and

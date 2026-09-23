@@ -1,7 +1,7 @@
 # Decision
 
 * [Dry-run is an early-return guard, not the kit's DryRun service](dry-run-guard-not-dryrun-service.md) - Step 6 of the orchestration is a plain early return emitting a different report, not an instance of @effected/github-actions's DryRun service.
-* [Explicit values only, no release lookup](explicit-values-only.md) - The action applies only the url/path/sha values a caller supplies; it never resolves a release, a ref, or a "latest" sentinel to a commit SHA on its own.
+* [Explicit values only, no release lookup](explicit-values-only.md) - The action applies only the sha/path values a caller supplies; it never resolves a release, a ref, or a "latest" sentinel to a commit SHA on its own.
 * [Fixed manifest paths per marketplace, no discovery](fixed-manifest-paths-per-marketplace.md) - claude-code and copilot each map to exactly one hardcoded manifest path; a path input per marketplace and Copilot's four-location discovery were both rejected.
 * [Multi-marketplace repins land as one commit, not one per file](multi-marketplace-repins-land-as-one-commit.md) - A run that touches both the Claude Code and Copilot manifests lands every change in a single commit (or a single PR head move); one commit per touched file was rejected because pr mode re-roots the head branch on every run.
 * [PR head re-rooted onto base in one ref move](pr-head-rerooted-in-one-ref-move.md) - Every pr-mode run re-roots the head branch at base's current tip, unconditionally, and does so as a single GitBranch.upsert to the already-built commit.
