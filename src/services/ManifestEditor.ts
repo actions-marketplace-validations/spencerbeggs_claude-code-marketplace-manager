@@ -1,7 +1,8 @@
 import type { JsoncModificationError, JsoncParseError } from "@effected/jsonc";
 import { Jsonc, JsoncEdit, JsoncModifier } from "@effected/jsonc";
 import { Effect, FileSystem } from "effect";
-import { ManifestValidationError, PluginNotFoundError } from "../errors/errors.js";
+import { ManifestNotFoundError, ManifestValidationError, PluginNotFoundError } from "../errors/errors.js";
+import type { Marketplace } from "../marketplaces.js";
 import type { ChangeRecord } from "../schema/marketplace.js";
 import { decodeMarketplace } from "../schema/marketplace.js";
 
@@ -58,11 +59,16 @@ const currentValue = (parsed: unknown, index: number, field: "path" | "sha"): st
 };
 
 /**
- * Apply partial-merge patches to the manifest text, format-preservingly. Only
+ * Apply patches to marketplace `m`'s manifest text, format-preservingly. Only
  * provided fields whose value actually differs are written. Returns the edited
  * text, whether anything changed, the manifest `name`, and the change records.
+ *
+ * @remarks
+ * A field absent from the entry's `source` is inserted — this is how an
+ * unpinned entry gets its first `sha`.
  */
 export const applyPatches = (
+	m: Marketplace,
 	text: string,
 	patches: ReadonlyArray<EntryPatch>,
 ): Effect.Effect<
@@ -75,9 +81,9 @@ export const applyPatches = (
 			Effect.mapError(
 				(e) =>
 					new ManifestValidationError({
-						marketplace: "claude-code",
-						path: MANIFEST_PATH,
-						errors: [`marketplace.json is not a valid marketplace manifest: ${String(e)}`],
+						marketplace: m.id,
+						path: m.path,
+						errors: [`${m.path} is not a valid marketplace manifest: ${String(e)}`],
 					}),
 			),
 		);
@@ -90,7 +96,7 @@ export const applyPatches = (
 		for (const patch of patches) {
 			const index = names.indexOf(patch.name);
 			if (index === -1) {
-				return yield* Effect.fail(new PluginNotFoundError({ name: patch.name }));
+				return yield* Effect.fail(new PluginNotFoundError({ marketplace: m.id, path: m.path, name: patch.name }));
 			}
 			for (const field of FIELDS) {
 				const next = patch[field];
@@ -103,7 +109,7 @@ export const applyPatches = (
 				const edits = yield* JsoncModifier.modify(currentText, ["plugins", index, "source", field], next);
 				currentText = JsoncEdit.applyAll(currentText, edits);
 				parsed = yield* Jsonc.parse(currentText);
-				changes.push({ pluginName: patch.name, manifestName, field, value: next });
+				changes.push({ marketplace: m.id, path: m.path, pluginName: patch.name, manifestName, field, value: next });
 			}
 		}
 
@@ -117,9 +123,18 @@ export const applyPatches = (
 	});
 
 /**
- * Read the manifest text from the checkout. The error type is inferred from
- * `fs.readFileString` (a platform error, not one of our tagged errors), so no
- * explicit error annotation is needed.
+ * Read marketplace `m`'s manifest from the checkout.
+ *
+ * @remarks
+ * Only manifests some patch targets are read, so a missing file is always a
+ * caller error — surfaced as {@link ManifestNotFoundError} naming the
+ * marketplace, rather than a bare platform error naming only a path.
  */
-export const readManifest = (path: string = MANIFEST_PATH) =>
-	Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readFileString(path));
+export const readManifest = (m: Marketplace) =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		if (!(yield* fs.exists(m.path))) {
+			return yield* Effect.fail(new ManifestNotFoundError({ marketplace: m.id, path: m.path }));
+		}
+		return yield* fs.readFileString(m.path);
+	});

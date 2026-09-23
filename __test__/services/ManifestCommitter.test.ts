@@ -29,7 +29,16 @@ const change = Effect.runSync(
 			editedText: EDITED,
 			changed: true,
 			manifestName: "acme",
-			changes: [{ pluginName: "p1", manifestName: "acme", field: "sha", value: "1".repeat(40) }],
+			changes: [
+				{
+					marketplace: "claude-code",
+					path: ".claude-plugin/marketplace.json",
+					pluginName: "p1",
+					manifestName: "acme",
+					field: "sha",
+					value: "1".repeat(40),
+				},
+			],
 		},
 		["p1"],
 	),

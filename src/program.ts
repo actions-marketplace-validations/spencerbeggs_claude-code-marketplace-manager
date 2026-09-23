@@ -78,8 +78,8 @@ const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 		}
 
 		// 1–4: read, edit, no-op guard.
-		const text = yield* readManifest();
-		const edit = yield* applyPatches(text, inputs.patches);
+		const text = yield* readManifest(CLAUDE_CODE);
+		const edit = yield* applyPatches(CLAUDE_CODE, text, inputs.patches);
 
 		if (!edit.changed) {
 			yield* Effect.logInfo("Step: edit — SKIPPED: no changes; nothing to commit");

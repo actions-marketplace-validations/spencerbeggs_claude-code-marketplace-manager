@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { commitSubject, defaultCommitMessage, messageBody } from "../src/report.js";
 
 const c = (pluginName: string, field: "path" | "sha", value: string) => ({
+	marketplace: "claude-code" as const,
+	path: ".claude-plugin/marketplace.json",
 	pluginName,
 	manifestName: "savvy-web-systems",
 	field,

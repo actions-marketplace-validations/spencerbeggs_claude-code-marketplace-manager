@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { toReportOutput } from "../../src/schema/projections.js";
 import { SCHEMA_URL } from "../../src/schema/report-output.js";
 
-const change = { pluginName: "p1", manifestName: "acme", field: "sha" as const, value: "s" };
+const change = {
+	marketplace: "claude-code" as const,
+	path: ".claude-plugin/marketplace.json",
+	pluginName: "p1",
+	manifestName: "acme",
+	field: "sha" as const,
+	value: "s",
+};
 
 describe("toReportOutput", () => {
 	it("marks a no-op when nothing changed", () => {
@@ -45,8 +52,22 @@ describe("toReportOutput", () => {
 	});
 
 	it("groups multiple distinct plugins, preserving first-seen order and count", () => {
-		const changeB = { pluginName: "b", manifestName: "acme", field: "sha" as const, value: "s2" };
-		const changeA = { pluginName: "a", manifestName: "acme", field: "path" as const, value: "./a" };
+		const changeB = {
+			marketplace: "claude-code" as const,
+			path: ".claude-plugin/marketplace.json",
+			pluginName: "b",
+			manifestName: "acme",
+			field: "sha" as const,
+			value: "s2",
+		};
+		const changeA = {
+			marketplace: "claude-code" as const,
+			path: ".claude-plugin/marketplace.json",
+			pluginName: "a",
+			manifestName: "acme",
+			field: "path" as const,
+			value: "./a",
+		};
 		const out = toReportOutput({
 			mode: "commit",
 			dryRun: false,
@@ -65,8 +86,22 @@ describe("toReportOutput", () => {
 	});
 
 	it("accumulates multiple fields for the same plugin into one entry", () => {
-		const shaChange = { pluginName: "p1", manifestName: "acme", field: "sha" as const, value: "s" };
-		const pathChange = { pluginName: "p1", manifestName: "acme", field: "path" as const, value: "./p" };
+		const shaChange = {
+			marketplace: "claude-code" as const,
+			path: ".claude-plugin/marketplace.json",
+			pluginName: "p1",
+			manifestName: "acme",
+			field: "sha" as const,
+			value: "s",
+		};
+		const pathChange = {
+			marketplace: "claude-code" as const,
+			path: ".claude-plugin/marketplace.json",
+			pluginName: "p1",
+			manifestName: "acme",
+			field: "path" as const,
+			value: "./p",
+		};
 		const out = toReportOutput({
 			mode: "commit",
 			dryRun: false,

@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import type { MarketplaceId } from "./input.js";
 
 /** A single plugin entry; `source` is kept loose so non-git-subdir sources decode too. */
 export const MarketplacePlugin = Schema.Struct({
@@ -24,6 +25,9 @@ export const decodeMarketplace = Schema.decodeUnknownEffect(Marketplace);
 
 /** One applied field change, used by projections and the message/report builders. */
 export interface ChangeRecord {
+	readonly marketplace: MarketplaceId;
+	/** Manifest file the change was written to. */
+	readonly path: string;
 	readonly pluginName: string;
 	readonly manifestName: string;
 	readonly field: "path" | "sha";
