@@ -1,8 +1,8 @@
 import type { GitHubError, GitHubGraphQLError } from "@effected/github";
 import { FileContent, GitBranch, GitCommit, GitHubRepository, PullRequest, Repo } from "@effected/github";
+import type { Array as Arr } from "effect";
 import { Effect } from "effect";
 import { InvalidInputError } from "../errors/errors.js";
-import { MANIFEST_PATH } from "./ManifestEditor.js";
 import type { ValidatedManifestChange } from "./ManifestValidator.js";
 
 /** Outcome of landing an edit. */
@@ -19,11 +19,12 @@ export interface LandParams {
 	readonly base: string;
 	readonly branch: string;
 	/**
-	 * The manifest change to commit. Requiring the branded, validator-minted type
-	 * rather than a plain `string` is what makes "land unvalidated or byte-stable
-	 * text" a compile error instead of a convention.
+	 * Every manifest change to commit, one per touched file. Requiring a
+	 * non-empty array of the branded, validator-minted type is what makes "land
+	 * nothing" and "land unvalidated or byte-stable text" compile errors instead
+	 * of conventions.
 	 */
-	readonly change: ValidatedManifestChange;
+	readonly changes: Arr.NonEmptyReadonlyArray<ValidatedManifestChange>;
 	readonly commitMessage: string;
 	readonly prTitle: string;
 	readonly prBody: string;
@@ -86,6 +87,12 @@ export const resolveBaseBranch = (input: string | null): Effect.Effect<string, G
  * The failure would arrive after the write it was supposed to prevent. The
  * guard lives here rather than at the call site because it protects the write,
  * not the caller.
+ *
+ * **One commit for every manifest.** Each validated change becomes one
+ * `FileContent` in the same tree, so a run that repins a plugin in both
+ * marketplaces lands as a single commit (or a single head-ref move in `pr`
+ * mode) — never one per file, which in `pr` mode would re-root the head branch
+ * between them and discard the first.
  */
 export const land = (
 	params: LandParams,
@@ -97,7 +104,7 @@ export const land = (
 	Effect.gen(function* () {
 		const commit = yield* GitCommit;
 		const { owner, repo } = yield* Repo;
-		const changes = [new FileContent({ path: MANIFEST_PATH, content: params.change.editedText })];
+		const changes = params.changes.map((c) => new FileContent({ path: c.path, content: c.editedText }));
 		const commitUrl = (sha: string): string => `https://github.com/${owner}/${repo}/commit/${sha}`;
 
 		if (params.mode === "pr" && params.base === params.branch) {

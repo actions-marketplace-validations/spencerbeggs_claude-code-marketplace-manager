@@ -140,7 +140,7 @@ const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 			mode: inputs.mode,
 			base,
 			branch: inputs.branch,
-			change,
+			changes: [change],
 			commitMessage,
 			prTitle,
 			prBody,

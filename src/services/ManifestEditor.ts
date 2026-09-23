@@ -6,9 +6,6 @@ import type { Marketplace } from "../marketplaces.js";
 import type { ChangeRecord } from "../schema/marketplace.js";
 import { decodeMarketplace } from "../schema/marketplace.js";
 
-/** Path of the manifest within the checkout. */
-export const MANIFEST_PATH = ".claude-plugin/marketplace.json";
-
 /**
  * The fields of a patch the editor applies. Structural rather than
  * `PluginPatch` so the editor does not depend on the input envelope — a
