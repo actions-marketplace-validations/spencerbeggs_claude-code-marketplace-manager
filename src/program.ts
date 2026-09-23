@@ -1,15 +1,16 @@
 import type { ActionOutputsShape } from "@effected/github-actions";
 import { ActionOutputs, GitHubToken } from "@effected/github-actions";
-import { Cause, Effect, Exit } from "effect";
-import { InvalidInputError } from "./errors/errors.js";
+import { Array as Arr, Cause, Effect, Exit } from "effect";
 import type { ParsedInputs } from "./inputs.js";
 import { parseInputs } from "./inputs.js";
-import { CLAUDE_CODE } from "./marketplaces.js";
+import { MARKETPLACES, MARKETPLACE_ORDER } from "./marketplaces.js";
 import { buildSummary, commitSubject, defaultCommitMessage, messageBody } from "./report.js";
+import type { ChangeRecord } from "./schema/marketplace.js";
 import { toReportOutput } from "./schema/projections.js";
 import { ReportOutput } from "./schema/report-output.js";
 import { land, resolveBaseBranch } from "./services/ManifestCommitter.js";
 import { applyPatches, readManifest } from "./services/ManifestEditor.js";
+import type { ValidatedManifestChange } from "./services/ManifestValidator.js";
 import { validateEdit } from "./services/ManifestValidator.js";
 
 /** Emit the structured result (non-fatal), convenience scalars, and the job summary (non-fatal). */
@@ -67,22 +68,37 @@ const emitFailure = (outputs: ActionOutputsShape, mode: "commit" | "pr", dryRun:
 /** Read, edit, validate, and land the manifest change once inputs are parsed. */
 const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 	Effect.gen(function* () {
-		// Interim until the per-marketplace pipeline lands: only claude-code is
-		// wired through read/edit/validate/land. Removed when program.ts groups
-		// patches by marketplace.
-		const unwired = inputs.patches.find((p) => p.marketplace !== "claude-code");
-		if (unwired !== undefined) {
-			return yield* Effect.fail(
-				new InvalidInputError({ field: "marketplace", reason: `${unwired.marketplace} is not wired yet` }),
+		// 1–5 per marketplace: read, edit, no-op guard, validate. Every targeted
+		// manifest is validated before anything lands, so one bad file stops the
+		// whole run — all-or-nothing across files, not just within one.
+		const validated: Array<ValidatedManifestChange> = [];
+		const changes: Array<ChangeRecord> = [];
+		for (const id of MARKETPLACE_ORDER) {
+			const patches = inputs.patches.filter((p) => p.marketplace === id);
+			if (patches.length === 0) {
+				continue;
+			}
+			const m = MARKETPLACES[id];
+			const text = yield* readManifest(m);
+			const edit = yield* applyPatches(m, text, patches);
+			if (!edit.changed) {
+				yield* Effect.logInfo(`Step: edit ${m.path} — SKIPPED: no changes`);
+				continue;
+			}
+			// `edit` has narrowed to ChangedEdit; `validateEdit` mints the branded
+			// change `land` requires.
+			validated.push(
+				yield* validateEdit(
+					m,
+					edit,
+					patches.map((p) => p.name),
+				),
 			);
+			changes.push(...edit.changes);
 		}
 
-		// 1–4: read, edit, no-op guard.
-		const text = yield* readManifest(CLAUDE_CODE);
-		const edit = yield* applyPatches(CLAUDE_CODE, text, inputs.patches);
-
-		if (!edit.changed) {
-			yield* Effect.logInfo("Step: edit — SKIPPED: no changes; nothing to commit");
+		if (!Arr.isReadonlyArrayNonEmpty(validated)) {
+			yield* Effect.logInfo("Step: edit — SKIPPED: no changes in any manifest; nothing to commit");
 			const output = toReportOutput({
 				mode: inputs.mode,
 				dryRun: inputs.dryRun,
@@ -98,23 +114,12 @@ const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 			return;
 		}
 
-		// 5: validate the result before any commit. `edit` has narrowed to
-		// ChangedEdit at the guard above, and `validateEdit` mints the branded
-		// change that `land` requires — the two halves of the commit-time
-		// invariant, both enforced by the type checker rather than by this
-		// function's ordering.
-		const change = yield* validateEdit(
-			CLAUDE_CODE,
-			edit,
-			inputs.patches.map((p) => p.name),
-		);
-
 		if (inputs.dryRun) {
 			yield* Effect.logInfo("Step: land — SKIPPED: dry run");
 			const output = toReportOutput({
 				mode: inputs.mode,
 				dryRun: true,
-				changes: edit.changes,
+				changes,
 				commitSha: null,
 				commitUrl: null,
 				prNumber: null,
@@ -130,9 +135,9 @@ const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 		// Computed only on the land path — dry-run never reads the token identity, so
 		// the dry-run test needs no provisioned token.
 		const bot = yield* GitHubToken.botIdentity();
-		const commitMessage = inputs.commitMessage ?? defaultCommitMessage(edit.changes, bot);
-		const prTitle = inputs.prTitle ?? commitSubject(edit.changes);
-		const prBody = inputs.prBody ?? messageBody(edit.changes);
+		const commitMessage = inputs.commitMessage ?? defaultCommitMessage(changes, bot);
+		const prTitle = inputs.prTitle ?? commitSubject(changes);
+		const prBody = inputs.prBody ?? messageBody(changes);
 
 		// 6: land.
 		const base = yield* resolveBaseBranch(inputs.baseBranch);
@@ -140,7 +145,7 @@ const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 			mode: inputs.mode,
 			base,
 			branch: inputs.branch,
-			changes: [change],
+			changes: validated,
 			commitMessage,
 			prTitle,
 			prBody,
@@ -150,7 +155,7 @@ const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 		const output = toReportOutput({
 			mode: inputs.mode,
 			dryRun: false,
-			changes: edit.changes,
+			changes,
 			commitSha: result.commitSha,
 			commitUrl: result.commitUrl,
 			prNumber: result.prNumber,

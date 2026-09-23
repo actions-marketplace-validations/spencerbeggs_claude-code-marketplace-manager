@@ -3,9 +3,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
-import { GitBranch, GitCommit, GitHubRepository, PullRequest, Repo, RepoRef } from "@effected/github";
+import {
+	GitBranch,
+	GitCommit,
+	GitHubRepository,
+	InstallationToken,
+	PullRequest,
+	Repo,
+	RepoRef,
+} from "@effected/github";
+import type { ActionStateShape } from "@effected/github-actions";
 import { ActionInput, ActionOutputs, ActionState } from "@effected/github-actions";
-import { Cause, ConfigProvider, Effect, Exit, Layer, Schema } from "effect";
+import { Cause, ConfigProvider, DateTime, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import { program } from "../src/program.js";
 
 // The bundled marketplace.json schema requires `owner` at the top level.
@@ -18,10 +27,25 @@ const MANIFEST = `{
 }
 `;
 
-const setup = () => {
+const COPILOT_MANIFEST = `{
+	"name": "acme",
+	"owner": { "name": "Acme" },
+	"plugins": [
+		{ "name": "p1", "source": { "source": "github", "repo": "acme/p1", "path": "plugins/copilot" } },
+		{ "name": "p2", "source": "plugins/p2" }
+	]
+}
+`;
+
+/** A checkout with the Claude manifest, and the Copilot one unless `copilot` is false. */
+const setup = (copilot = true) => {
 	const dir = mkdtempSync(join(tmpdir(), "mm-"));
 	mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
 	writeFileSync(join(dir, ".claude-plugin/marketplace.json"), MANIFEST);
+	if (copilot) {
+		mkdirSync(join(dir, ".github/plugin"), { recursive: true });
+		writeFileSync(join(dir, ".github/plugin/marketplace.json"), COPILOT_MANIFEST);
+	}
 	return dir;
 };
 
@@ -102,6 +126,74 @@ const withProgram = (inputs: Record<string, string>, dir: string) => {
 
 const outputValue = (recorded: ReadonlyArray<{ name: string; value: string }>, name: string) =>
 	recorded.find((o) => o.name === name)?.value;
+
+const liveToken = InstallationToken.make({
+	token: Redacted.make("ghs_live"),
+	expiresAt: DateTime.fromDateUnsafe(new Date(Date.now() + 60 * 60 * 1000)),
+	installationId: 1,
+	permissions: { contents: "write" },
+});
+
+/**
+ * `program` with commit-mode landing stubbed and recorded.
+ *
+ * @remarks
+ * Only `commitFiles` is stubbed; every other landing member stays a dying
+ * `layerTest` default, so a second commit, a branch move or a PR call fails
+ * the test. `ActionState.get` serves the live token because the land path
+ * reads the bot identity for the DCO trailer. The cast is the same unavoidable
+ * one post.test.ts documents: `get` is generic in the decoded type.
+ */
+const withLandingProgram = (inputs: Record<string, string>, dir: string) => {
+	const recorded: Array<{ readonly name: string; readonly value: string }> = [];
+	const commits: Array<{ readonly paths: ReadonlyArray<string>; readonly message: string }> = [];
+	const layer = Layer.mergeAll(
+		ActionOutputs.layerTest({
+			set: (name, value) =>
+				Effect.sync(() => {
+					recorded.push({ name, value });
+				}),
+			setJson: (name, value, schema) =>
+				Schema.encodeUnknownEffect(schema)(value).pipe(
+					Effect.orDie,
+					Effect.flatMap((encoded) =>
+						Effect.sync(() => {
+							recorded.push({ name, value: JSON.stringify(encoded) });
+						}),
+					),
+				),
+			summary: () => Effect.void,
+		}),
+		ActionState.layerTest({
+			get: (() => Effect.succeed(liveToken)) as unknown as ActionStateShape["get"],
+		}),
+		GitCommit.layerTest({
+			commitFiles: ({ message, changes }) =>
+				Effect.sync(() => {
+					commits.push({ message, paths: changes.map((c) => c.path) });
+					return "direct-commit-sha";
+				}),
+		}),
+		GitBranch.layerTest(),
+		PullRequest.layerTest(),
+		GitHubRepository.layerTest(),
+		Layer.succeed(Repo, RepoRef.make({ owner: "test-owner", repo: "test-repo" })),
+		NodeFileSystem.layer,
+	);
+	const cwd = process.cwd();
+	const run = Effect.gen(function* () {
+		process.chdir(dir);
+		return yield* program;
+	}).pipe(
+		Effect.ensuring(Effect.sync(() => process.chdir(cwd))),
+		Effect.provide(layer),
+		Effect.provide(ConfigProvider.layer(ActionInput.provider(inputs))),
+	);
+	return { run, recorded, commits };
+};
+
+const SHA1 = "1".repeat(40);
+const json = (plugins: ReadonlyArray<Record<string, string>>) => JSON.stringify({ plugins });
 
 describe("program", () => {
 	it.effect("dry-run emits a result and never lands", () =>
@@ -249,14 +341,118 @@ describe("program", () => {
 		}),
 	);
 
-	it.effect("interim: a copilot patch is rejected until the pipeline is wired", () =>
+	it.effect("lands both marketplaces in one commit", () =>
+		Effect.gen(function* () {
+			const h = withLandingProgram(
+				{
+					json: json([
+						{ name: "p1", marketplace: "claude-code", sha: SHA1 },
+						{ name: "p1", marketplace: "copilot", sha: SHA1 },
+					]),
+					"base-branch": "main",
+				},
+				setup(),
+			);
+			yield* h.run;
+
+			assert.deepStrictEqual(
+				h.commits.map((c) => c.paths),
+				[[".claude-plugin/marketplace.json", ".github/plugin/marketplace.json"]],
+			);
+			assert.include(h.commits[0]?.message ?? "", "(claude-code, copilot)");
+			assert.strictEqual(outputValue(h.recorded, "status"), "success");
+			assert.strictEqual(outputValue(h.recorded, "plugins-updated"), "2");
+			assert.strictEqual(outputValue(h.recorded, "commit-sha"), "direct-commit-sha");
+			const result = JSON.parse(String(outputValue(h.recorded, "result"))) as { manifests: ReadonlyArray<string> };
+			assert.deepStrictEqual(result.manifests, [".claude-plugin/marketplace.json", ".github/plugin/marketplace.json"]);
+		}),
+	);
+
+	it.effect("leaves a byte-stable manifest out of the commit", () =>
+		Effect.gen(function* () {
+			const h = withLandingProgram(
+				{
+					json: json([
+						{ name: "p1", marketplace: "claude-code", sha: "0".repeat(40) },
+						{ name: "p1", marketplace: "copilot", sha: SHA1 },
+					]),
+					"base-branch": "main",
+				},
+				setup(),
+			);
+			yield* h.run;
+			assert.deepStrictEqual(
+				h.commits.map((c) => c.paths),
+				[[".github/plugin/marketplace.json"]],
+			);
+			assert.strictEqual(outputValue(h.recorded, "plugins-updated"), "1");
+		}),
+	);
+
+	it.effect("a manual copilot patch lands only the copilot manifest", () =>
+		Effect.gen(function* () {
+			const h = withLandingProgram(
+				{ name: "p1", marketplace: "copilot", sha: SHA1, path: "plugins/copilot-v2", "base-branch": "main" },
+				setup(),
+			);
+			yield* h.run;
+			assert.deepStrictEqual(
+				h.commits.map((c) => c.paths),
+				[[".github/plugin/marketplace.json"]],
+			);
+		}),
+	);
+
+	it.effect("a missing targeted manifest fails the run and lands nothing", () =>
+		Effect.gen(function* () {
+			// Bare doubles: any landing call would die.
+			const h = withProgram(
+				{
+					json: json([
+						{ name: "p1", marketplace: "claude-code", sha: SHA1 },
+						{ name: "p1", marketplace: "copilot", sha: SHA1 },
+					]),
+					"base-branch": "main",
+				},
+				setup(false),
+			);
+			const exit = yield* Effect.exit(h.run);
+			assert.isTrue(Exit.isFailure(exit));
+			assert.include(
+				Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
+				"Marketplace manifest not found for copilot",
+			);
+			assert.strictEqual(outputValue(h.recorded, "status"), "failed");
+		}),
+	);
+
+	// p2's source is a bare path string: structurally allowed, not pinnable.
+	// `applyPatches` fails while modifying the string node — `JsoncModifier`
+	// rejects writing a `source.sha` key path into a value that is a plain
+	// string, not an object — so the validator's "source.source must be
+	// \"github\"" message is never reached. Per the brief's pre-ruled
+	// fallback: keep the failure/no-landing assertions and adapt the message
+	// check to what actually fires. The rendered `JsoncModificationError`
+	// message is `Modification failed at path [plugins, 1, source, sha]:
+	// expected object at depth 4` — it names the path, not the plugin, so a
+	// literal `"p2"` substring (the brief's suggested text) does not appear;
+	// asserting the error tag proves the write-time failure fired, which is
+	// the property this test needs.
+	it.effect("an invalid copilot edit lands nothing, even when the claude edit is valid", () =>
 		Effect.gen(function* () {
 			const h = withProgram(
-				{ name: "p1", marketplace: "copilot", sha: "1".repeat(40), "base-branch": "main" },
+				{
+					json: json([
+						{ name: "p1", marketplace: "claude-code", sha: SHA1 },
+						{ name: "p2", marketplace: "copilot", sha: SHA1 },
+					]),
+					"base-branch": "main",
+				},
 				setup(),
 			);
 			const exit = yield* Effect.exit(h.run);
 			assert.isTrue(Exit.isFailure(exit));
+			assert.include(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "", "JsoncModificationError");
 			assert.strictEqual(outputValue(h.recorded, "status"), "failed");
 		}),
 	);
