@@ -45,7 +45,7 @@ describe("toReportOutput", () => {
 	});
 
 	it("groups multiple distinct plugins, preserving first-seen order and count", () => {
-		const changeB = { pluginName: "b", manifestName: "acme", field: "url" as const, value: "http://b" };
+		const changeB = { pluginName: "b", manifestName: "acme", field: "sha" as const, value: "s2" };
 		const changeA = { pluginName: "a", manifestName: "acme", field: "path" as const, value: "./a" };
 		const out = toReportOutput({
 			mode: "commit",
@@ -60,7 +60,7 @@ describe("toReportOutput", () => {
 		});
 		expect(out.pluginsUpdated).toBe(2);
 		expect(out.plugins.map((p) => p.name)).toEqual(["b", "a"]);
-		expect(out.plugins[0]?.fields).toEqual(["url"]);
+		expect(out.plugins[0]?.fields).toEqual(["sha"]);
 		expect(out.plugins[1]?.fields).toEqual(["path"]);
 	});
 

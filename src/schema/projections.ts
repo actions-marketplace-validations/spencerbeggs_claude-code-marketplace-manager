@@ -21,9 +21,9 @@ const deriveStatus = (noop: boolean, succeeded: boolean): ResultStatus =>
 /** Group flat change records into `{ name, fields[] }` per plugin, preserving order. */
 const groupPlugins = (
 	changes: ReadonlyArray<ChangeRecord>,
-): ReadonlyArray<{ name: string; fields: Array<"url" | "path" | "sha"> }> => {
+): ReadonlyArray<{ name: string; fields: Array<"path" | "sha"> }> => {
 	const order: Array<string> = [];
-	const byName = new Map<string, Array<"url" | "path" | "sha">>();
+	const byName = new Map<string, Array<"path" | "sha">>();
 	for (const c of changes) {
 		if (!byName.has(c.pluginName)) {
 			byName.set(c.pluginName, []);

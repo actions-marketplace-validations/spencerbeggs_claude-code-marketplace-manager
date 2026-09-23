@@ -1,6 +1,7 @@
 import type { ActionOutputsShape } from "@effected/github-actions";
 import { ActionOutputs, GitHubToken } from "@effected/github-actions";
 import { Cause, Effect, Exit } from "effect";
+import { InvalidInputError } from "./errors/errors.js";
 import type { ParsedInputs } from "./inputs.js";
 import { parseInputs } from "./inputs.js";
 import { buildSummary, commitSubject, defaultCommitMessage, messageBody } from "./report.js";
@@ -65,6 +66,16 @@ const emitFailure = (outputs: ActionOutputsShape, mode: "commit" | "pr", dryRun:
 /** Read, edit, validate, and land the manifest change once inputs are parsed. */
 const runOrchestration = (outputs: ActionOutputsShape, inputs: ParsedInputs) =>
 	Effect.gen(function* () {
+		// Interim until the per-marketplace pipeline lands: only claude-code is
+		// wired through read/edit/validate/land. Removed when program.ts groups
+		// patches by marketplace.
+		const unwired = inputs.patches.find((p) => p.marketplace !== "claude-code");
+		if (unwired !== undefined) {
+			return yield* Effect.fail(
+				new InvalidInputError({ field: "marketplace", reason: `${unwired.marketplace} is not wired yet` }),
+			);
+		}
+
 		// 1–4: read, edit, no-op guard.
 		const text = yield* readManifest();
 		const edit = yield* applyPatches(text, inputs.patches);

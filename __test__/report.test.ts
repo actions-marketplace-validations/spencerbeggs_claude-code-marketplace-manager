@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { commitSubject, defaultCommitMessage, messageBody } from "../src/report.js";
 
-const c = (pluginName: string, field: "url" | "path" | "sha", value: string) => ({
+const c = (pluginName: string, field: "path" | "sha", value: string) => ({
 	pluginName,
 	manifestName: "savvy-web-systems",
 	field,

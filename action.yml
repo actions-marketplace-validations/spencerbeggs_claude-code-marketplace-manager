@@ -11,27 +11,27 @@ runs:
   post: dist/post.js
 inputs:
   name:
-    description: "Plugin name to update (manual path). Requires at least one of url/path/sha."
+    description: "Plugin entry name to repin (manual path). Requires marketplace and sha."
     required: false
     default: ""
-  url:
-    description: "New source.url for the named plugin (manual path)."
+  marketplace:
+    description: "Target marketplace for the manual path: claude-code (.claude-plugin/marketplace.json) or copilot (.github/plugin/marketplace.json). Not used to detect the manual path."
     required: false
     default: ""
   path:
-    description: "New source.path for the named plugin (manual path)."
+    description: "New source.path for the named plugin (manual path, optional)."
     required: false
     default: ""
   sha:
-    description: "New source.sha (40-hex commit) for the named plugin (manual path)."
+    description: "New source.sha (40-hex commit) for the named plugin (manual path, required)."
     required: false
     default: ""
   json:
     description: |
-      Programmatic path: a JSON object with a "plugins" array of per-plugin
-      partial-merge patches. Each entry names an existing plugin and changes
-      only the provided fields.
-      Example: '{"plugins":[{"name":"vitest-agent","sha":"8cba76025762cfa1dca24e6daafe2e3dc7c14924"}]}'
+      Programmatic path: a JSON object with a "plugins" array of patches. Each
+      entry names an existing plugin in one marketplace and sets its sha (and
+      optionally path). Every touched manifest lands in one commit.
+      Example: '{"plugins":[{"name":"effected","marketplace":"claude-code","sha":"8cba76025762cfa1dca24e6daafe2e3dc7c14924"},{"name":"effected","marketplace":"copilot","sha":"8cba76025762cfa1dca24e6daafe2e3dc7c14924"}]}'
     required: false
     default: ""
   mode:

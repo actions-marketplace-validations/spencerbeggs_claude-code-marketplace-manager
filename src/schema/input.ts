@@ -52,19 +52,32 @@ export const InputSchemaIdentity: HostedSchema = hosted("input");
  */
 export const INPUT_SCHEMA_URL: string = InputSchemaIdentity.$id;
 
-/**
- * A single per-plugin partial-merge patch: names an existing plugin and changes
- * only the fields present.
- */
-/** Lowercase 40-hex commit SHA, matching `ManifestValidator`'s `SHA_RE`. */
+/** Lowercase 40-hex commit SHA, matching the validators' `SHA_RE`. */
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
+/** A non-empty path that is not absolute. */
+const RELATIVE_PATH_PATTERN = /^[^/].*$/;
+
+/** The marketplaces a patch can target; each owns one fixed manifest path. */
+export const MarketplaceId = Schema.Literals(["claude-code", "copilot"]).annotate({
+	description: "Which marketplace manifest the patch targets.",
+});
+
+/** Decoded marketplace identifier. */
+export type MarketplaceId = typeof MarketplaceId.Type;
+
+/**
+ * A single repin: names an existing entry in one marketplace's manifest and
+ * sets its `source.sha` (and optionally `source.path`).
+ */
 export const PluginPatch = Schema.Struct({
-	name: Schema.String.annotate({ description: "Name of an existing plugin to update." }),
-	url: Schema.optionalKey(Schema.String).annotate({ description: "New source.url." }),
-	path: Schema.optionalKey(Schema.String).annotate({ description: "New source.path." }),
-	sha: Schema.optionalKey(Schema.String.check(Schema.isPattern(SHA_PATTERN))).annotate({
+	name: Schema.NonEmptyString.annotate({ description: "Name of an existing plugin entry in the target manifest." }),
+	marketplace: MarketplaceId,
+	sha: Schema.String.check(Schema.isPattern(SHA_PATTERN)).annotate({
 		description: "New source.sha (40-hex lowercase commit).",
+	}),
+	path: Schema.optionalKey(Schema.String.check(Schema.isPattern(RELATIVE_PATH_PATTERN))).annotate({
+		description: "New source.path (non-empty, relative).",
 	}),
 }).annotate({ identifier: "PluginPatch" });
 
@@ -72,20 +85,32 @@ export const PluginPatch = Schema.Struct({
 export type PluginPatch = typeof PluginPatch.Type;
 
 /**
- * The `json` input: an object envelope carrying the per-plugin patches.
+ * The `json` input: an object envelope carrying the patches.
  *
  * @remarks
  * A top-level object (rather than a bare array) so this schema is usable as-is
  * by tool-calling / structured-output validators that require an object root.
- * The `plugins` key mirrors `marketplace.json`'s own top-level `plugins` array,
- * leaving room to add sibling keys later without a shape-breaking change.
  */
 export const JsonInput = Schema.Struct({
-	plugins: Schema.Array(PluginPatch).annotate({ description: "Per-plugin partial-merge patches." }),
+	// Not `Schema.NonEmptyArray`: its Draft-07 lowering (via @effected/schemastore)
+	// emits a 1-tuple `items` that ajv's strict-mode gate rejects
+	// (`"items" is 1-tuple, but minItems or maxItems/additionalItems are not
+	// specified or different`). `Schema.Array` + `isMinLength(1)` expresses the
+	// same runtime constraint and lowers to a plain `minItems: 1`.
+	plugins: Schema.Array(PluginPatch)
+		.check(Schema.isMinLength(1))
+		.annotate({ description: "Plugin patches; at least one." }),
 }).annotate({ identifier: "MarketplacePatchInput" });
 
 /** Decoded `json` input type. */
 export type JsonInput = typeof JsonInput.Type;
 
-/** Decode an already-parsed JS value into the `json` input envelope. */
-export const decodeJsonInput = Schema.decodeUnknownEffect(JsonInput);
+/**
+ * Decode an already-parsed JS value into the `json` input envelope.
+ *
+ * @remarks
+ * `onExcessProperty: "error"` makes the decoder as strict as the published
+ * (closed) document, so a stray key — above all v1's `url` — fails instead of
+ * being silently stripped and the rest of the patch applied.
+ */
+export const decodeJsonInput = Schema.decodeUnknownEffect(JsonInput, { onExcessProperty: "error" });

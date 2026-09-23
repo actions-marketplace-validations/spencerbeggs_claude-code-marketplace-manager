@@ -106,7 +106,10 @@ const outputValue = (recorded: ReadonlyArray<{ name: string; value: string }>, n
 describe("program", () => {
 	it.effect("dry-run emits a result and never lands", () =>
 		Effect.gen(function* () {
-			const h = withProgram({ name: "p1", sha: "1".repeat(40), "dry-run": "true", "base-branch": "main" }, setup());
+			const h = withProgram(
+				{ name: "p1", marketplace: "claude-code", sha: "1".repeat(40), "dry-run": "true", "base-branch": "main" },
+				setup(),
+			);
 			yield* h.run;
 
 			assert.strictEqual(outputValue(h.recorded, "status"), "success");
@@ -123,7 +126,10 @@ describe("program", () => {
 	it.effect("a no-op edit reports status no-op, changed false, and skips validation and landing", () =>
 		Effect.gen(function* () {
 			// Patching p1 to the sha it already has is byte-stable.
-			const h = withProgram({ name: "p1", sha: "0".repeat(40), "base-branch": "main" }, setup());
+			const h = withProgram(
+				{ name: "p1", marketplace: "claude-code", sha: "0".repeat(40), "base-branch": "main" },
+				setup(),
+			);
 			yield* h.run;
 
 			assert.strictEqual(outputValue(h.recorded, "status"), "no-op");
@@ -135,11 +141,17 @@ describe("program", () => {
 
 	it.effect("every terminal path emits a result output", () =>
 		Effect.gen(function* () {
-			const noop = withProgram({ name: "p1", sha: "0".repeat(40), "base-branch": "main" }, setup());
+			const noop = withProgram(
+				{ name: "p1", marketplace: "claude-code", sha: "0".repeat(40), "base-branch": "main" },
+				setup(),
+			);
 			yield* noop.run;
 			assert.isDefined(outputValue(noop.recorded, "result"));
 
-			const dry = withProgram({ name: "p1", sha: "1".repeat(40), "dry-run": "true", "base-branch": "main" }, setup());
+			const dry = withProgram(
+				{ name: "p1", marketplace: "claude-code", sha: "1".repeat(40), "dry-run": "true", "base-branch": "main" },
+				setup(),
+			);
 			yield* dry.run;
 			assert.isDefined(outputValue(dry.recorded, "result"));
 		}),
@@ -148,7 +160,10 @@ describe("program", () => {
 	it.effect("a validation failure emits a failed result AND the program still fails", () =>
 		Effect.gen(function* () {
 			// A plugin name that is not in the manifest fails with PluginNotFoundError.
-			const h = withProgram({ name: "nope", sha: "1".repeat(40), "base-branch": "main" }, setup());
+			const h = withProgram(
+				{ name: "nope", marketplace: "claude-code", sha: "1".repeat(40), "base-branch": "main" },
+				setup(),
+			);
 			const exit = yield* Effect.exit(h.run);
 
 			assert.isTrue(Exit.isFailure(exit));
@@ -214,7 +229,14 @@ describe("program", () => {
 					Effect.ensuring(Effect.sync(() => process.chdir(cwd))),
 					Effect.provide(layer),
 					Effect.provide(
-						ConfigProvider.layer(ActionInput.provider({ name: "nope", sha: "1".repeat(40), "base-branch": "main" })),
+						ConfigProvider.layer(
+							ActionInput.provider({
+								name: "nope",
+								marketplace: "claude-code",
+								sha: "1".repeat(40),
+								"base-branch": "main",
+							}),
+						),
 					),
 				),
 			);
@@ -224,6 +246,18 @@ describe("program", () => {
 			// The domain failure is the missing plugin, not the output writer.
 			assert.include(rendered, "nope");
 			assert.notInclude(rendered, "GITHUB_OUTPUT is gone");
+		}),
+	);
+
+	it.effect("interim: a copilot patch is rejected until the pipeline is wired", () =>
+		Effect.gen(function* () {
+			const h = withProgram(
+				{ name: "p1", marketplace: "copilot", sha: "1".repeat(40), "base-branch": "main" },
+				setup(),
+			);
+			const exit = yield* Effect.exit(h.run);
+			assert.isTrue(Exit.isFailure(exit));
+			assert.strictEqual(outputValue(h.recorded, "status"), "failed");
 		}),
 	);
 });

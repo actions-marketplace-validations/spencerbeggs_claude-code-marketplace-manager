@@ -26,6 +26,6 @@ export const decodeMarketplace = Schema.decodeUnknownEffect(Marketplace);
 export interface ChangeRecord {
 	readonly pluginName: string;
 	readonly manifestName: string;
-	readonly field: "url" | "path" | "sha";
+	readonly field: "path" | "sha";
 	readonly value: string;
 }

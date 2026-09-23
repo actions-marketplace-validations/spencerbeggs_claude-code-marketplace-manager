@@ -19,8 +19,6 @@ const bullet = (c: ChangeRecord): string => {
 			return `- pinned ${ref} to ${c.value}`;
 		case "path":
 			return `- changed path of ${ref} to ${c.value}`;
-		case "url":
-			return `- changed url of ${ref} to ${c.value}`;
 	}
 };
 

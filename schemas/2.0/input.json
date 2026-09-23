@@ -8,23 +8,26 @@
 			"properties": {
 				"name": {
 					"type": "string",
-					"description": "Name of an existing plugin to update."
+					"minLength": 1,
+					"description": "Name of an existing plugin entry in the target manifest."
 				},
-				"url": {
+				"marketplace": {
 					"type": "string",
-					"description": "New source.url."
-				},
-				"path": {
-					"type": "string",
-					"description": "New source.path."
+					"enum": ["claude-code", "copilot"],
+					"description": "Which marketplace manifest the patch targets."
 				},
 				"sha": {
 					"type": "string",
 					"pattern": "^[0-9a-f]{40}$",
 					"description": "New source.sha (40-hex lowercase commit)."
+				},
+				"path": {
+					"type": "string",
+					"pattern": "^[^/].*$",
+					"description": "New source.path (non-empty, relative)."
 				}
 			},
-			"required": ["name"],
+			"required": ["name", "marketplace", "sha"],
 			"additionalProperties": false
 		},
 		"MarketplacePatchInput": {
@@ -32,7 +35,8 @@
 			"properties": {
 				"plugins": {
 					"type": "array",
-					"description": "Per-plugin partial-merge patches.",
+					"minItems": 1,
+					"description": "Plugin patches; at least one.",
 					"items": {
 						"$ref": "#/$defs/PluginPatch"
 					}

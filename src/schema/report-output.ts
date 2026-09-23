@@ -17,7 +17,7 @@ export type ResultStatus = "no-op" | "success" | "failed";
 
 const ChangedPlugin = Schema.Struct({
 	name: Schema.String,
-	fields: Schema.Array(Schema.Literals(["url", "path", "sha"])),
+	fields: Schema.Array(Schema.Literals(["path", "sha"])),
 }).annotate({ identifier: "ChangedPlugin" });
 
 const CommitInfo = Schema.Struct({

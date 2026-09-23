@@ -26,6 +26,47 @@ export interface ParsedInputs {
 
 const emptyToNull = (s: string): string | null => (s.length === 0 ? null : s);
 
+const PATCH_SHAPE = '{"plugins":[{name,marketplace,sha,path?}]}';
+
+/**
+ * Reject a v1 payload by name before the generic decode.
+ *
+ * @remarks
+ * The strict decoder would reject `url` anyway, but with a schema error a
+ * dispatcher still on v1 has to decode. Senders migrating from v1 all hit this
+ * one key, so it earns a message that says what v2 expects instead.
+ */
+const rejectLegacyUrl = (parsed: unknown): Effect.Effect<void, InvalidInputError> => {
+	const plugins = typeof parsed === "object" && parsed !== null ? (parsed as { plugins?: unknown }).plugins : undefined;
+	if (!Array.isArray(plugins)) {
+		return Effect.void;
+	}
+	const index = plugins.findIndex((p) => typeof p === "object" && p !== null && Object.hasOwn(p, "url"));
+	return index === -1
+		? Effect.void
+		: Effect.fail(
+				new InvalidInputError({
+					field: "json",
+					reason: `plugins[${index}].url is not supported in v2; a patch carries name, marketplace, sha and optionally path`,
+				}),
+			);
+};
+
+/** One patch per (marketplace, name): two would race inside one manifest edit. */
+const rejectDuplicates = (patches: ReadonlyArray<PluginPatch>): Effect.Effect<void, InvalidInputError> => {
+	const seen = new Set<string>();
+	for (const p of patches) {
+		const key = `${p.marketplace}\u0000${p.name}`;
+		if (seen.has(key)) {
+			return Effect.fail(
+				new InvalidInputError({ field: "json", reason: `duplicate patch for ${p.name} in ${p.marketplace}` }),
+			);
+		}
+		seen.add(key);
+	}
+	return Effect.void;
+};
+
 /**
  * Read and validate all inputs, enforcing the manual/json XOR.
  *
@@ -45,12 +86,16 @@ const emptyToNull = (s: string): string | null => (s.length === 0 ? null : s);
 export const parseInputs: Effect.Effect<ParsedInputs, InvalidInputError | Config.ConfigError> = Effect.gen(
 	function* () {
 		const name = yield* ActionInput.string("name").pipe(Cfg.withDefault(""));
-		const url = yield* ActionInput.string("url").pipe(Cfg.withDefault(""));
+		const marketplace = yield* ActionInput.string("marketplace").pipe(Cfg.withDefault(""));
 		const path = yield* ActionInput.string("path").pipe(Cfg.withDefault(""));
 		const sha = yield* ActionInput.string("sha").pipe(Cfg.withDefault(""));
 		const json = yield* ActionInput.string("json").pipe(Cfg.withDefault(""));
 
-		const hasManual = name.length > 0 || url.length > 0 || path.length > 0 || sha.length > 0;
+		// `marketplace` is deliberately NOT a manual-path signal. A consumer's
+		// workflow_dispatch choice input for it carries a default, so it is
+		// non-empty on every manual run — json-only ones included — and counting
+		// it would turn those into spurious XOR violations.
+		const hasManual = name.length > 0 || path.length > 0 || sha.length > 0;
 		const hasJson = json.length > 0;
 
 		if (hasManual && hasJson) {
@@ -60,7 +105,10 @@ export const parseInputs: Effect.Effect<ParsedInputs, InvalidInputError | Config
 		}
 		if (!hasManual && !hasJson) {
 			return yield* Effect.fail(
-				new InvalidInputError({ field: "name/json", reason: "provide the manual fields (name + a field) or json" }),
+				new InvalidInputError({
+					field: "name/json",
+					reason: "provide the manual fields (name, marketplace, sha) or json",
+				}),
 			);
 		}
 
@@ -70,13 +118,11 @@ export const parseInputs: Effect.Effect<ParsedInputs, InvalidInputError | Config
 				try: () => JSON.parse(json) as unknown,
 				catch: () => new InvalidInputError({ field: "json", reason: "not valid JSON" }),
 			});
+			yield* rejectLegacyUrl(parsed);
 			const decoded = yield* decodeJsonInput(parsed).pipe(
 				Effect.mapError(
-					() =>
-						new InvalidInputError({
-							field: "json",
-							reason: 'not an object of shape {"plugins":[{name,url?,path?,sha?}]}',
-						}),
+					(e) =>
+						new InvalidInputError({ field: "json", reason: `not an object of shape ${PATCH_SHAPE}: ${String(e)}` }),
 				),
 			);
 			patches = decoded.plugins;
@@ -84,29 +130,33 @@ export const parseInputs: Effect.Effect<ParsedInputs, InvalidInputError | Config
 			if (name.length === 0) {
 				return yield* Effect.fail(new InvalidInputError({ field: "name", reason: "required for the manual path" }));
 			}
-			if (url.length === 0 && path.length === 0 && sha.length === 0) {
+			if (marketplace.length === 0) {
 				return yield* Effect.fail(
-					new InvalidInputError({ field: "url/path/sha", reason: "provide at least one field to change" }),
+					new InvalidInputError({
+						field: "marketplace",
+						reason: "required for the manual path (claude-code or copilot)",
+					}),
 				);
 			}
+			if (sha.length === 0) {
+				return yield* Effect.fail(new InvalidInputError({ field: "sha", reason: "required for the manual path" }));
+			}
 			// Decode through the same schema as the json path so both forms get
-			// identical validation (e.g. the sha 40-hex pattern) and error shape.
+			// identical validation (sha pattern, marketplace literal) and error shape.
 			const decoded = yield* decodeJsonInput({
-				plugins: [
-					{
-						name,
-						...(url.length > 0 ? { url } : {}),
-						...(path.length > 0 ? { path } : {}),
-						...(sha.length > 0 ? { sha } : {}),
-					},
-				],
+				plugins: [{ name, marketplace, sha, ...(path.length > 0 ? { path } : {}) }],
 			}).pipe(
 				Effect.mapError(
-					() => new InvalidInputError({ field: "name/url/path/sha", reason: "invalid manual plugin patch" }),
+					(e) =>
+						new InvalidInputError({
+							field: "name/marketplace/sha/path",
+							reason: `invalid manual plugin patch: ${String(e)}`,
+						}),
 				),
 			);
 			patches = decoded.plugins;
 		}
+		yield* rejectDuplicates(patches);
 
 		const modeRaw = yield* ActionInput.string("mode").pipe(Cfg.withDefault(INPUT_DEFAULTS.mode));
 		if (modeRaw !== "commit" && modeRaw !== "pr") {

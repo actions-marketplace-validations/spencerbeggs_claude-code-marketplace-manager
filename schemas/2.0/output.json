@@ -13,7 +13,7 @@
 					"type": "array",
 					"items": {
 						"type": "string",
-						"enum": ["url", "path", "sha"]
+						"enum": ["path", "sha"]
 					}
 				}
 			},

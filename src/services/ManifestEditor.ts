@@ -2,12 +2,22 @@ import type { JsoncModificationError, JsoncParseError } from "@effected/jsonc";
 import { Jsonc, JsoncEdit, JsoncModifier } from "@effected/jsonc";
 import { Effect, FileSystem } from "effect";
 import { ManifestValidationError, PluginNotFoundError } from "../errors/errors.js";
-import type { PluginPatch } from "../schema/input.js";
 import type { ChangeRecord } from "../schema/marketplace.js";
 import { decodeMarketplace } from "../schema/marketplace.js";
 
 /** Path of the manifest within the checkout. */
 export const MANIFEST_PATH = ".claude-plugin/marketplace.json";
+
+/**
+ * The fields of a patch the editor applies. Structural rather than
+ * `PluginPatch` so the editor does not depend on the input envelope — a
+ * `PluginPatch` (which also carries `marketplace`) is assignable to it.
+ */
+export interface EntryPatch {
+	readonly name: string;
+	readonly sha: string;
+	readonly path?: string;
+}
 
 /** Fields shared by both {@link EditResult} variants. */
 interface EditResultBase {
@@ -37,10 +47,10 @@ export interface ChangedEdit extends EditResultBase {
  */
 export type EditResult = NoopEdit | ChangedEdit;
 
-const FIELDS = ["url", "path", "sha"] as const;
+const FIELDS = ["path", "sha"] as const;
 
 /** Read the current `source.<field>` value from the parsed manifest, if present. */
-const currentValue = (parsed: unknown, index: number, field: "url" | "path" | "sha"): string | undefined => {
+const currentValue = (parsed: unknown, index: number, field: "path" | "sha"): string | undefined => {
 	const plugins = (parsed as { plugins?: Array<{ source?: Record<string, unknown> }> }).plugins;
 	const source = plugins?.[index]?.source;
 	const value = source?.[field];
@@ -54,7 +64,7 @@ const currentValue = (parsed: unknown, index: number, field: "url" | "path" | "s
  */
 export const applyPatches = (
 	text: string,
-	patches: ReadonlyArray<PluginPatch>,
+	patches: ReadonlyArray<EntryPatch>,
 ): Effect.Effect<
 	EditResult,
 	PluginNotFoundError | JsoncParseError | JsoncModificationError | ManifestValidationError

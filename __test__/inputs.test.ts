@@ -34,8 +34,8 @@ function assertInvalidInput(error: Config.ConfigError | InvalidInputError): asse
 describe("parseInputs", () => {
 	it.effect("parses the manual path into a single patch", () =>
 		Effect.gen(function* () {
-			const parsed = yield* withInputs({ name: "vitest-agent", sha: SHA });
-			assert.deepStrictEqual(parsed.patches, [{ name: "vitest-agent", sha: SHA }]);
+			const parsed = yield* withInputs({ name: "vitest-agent", marketplace: "claude-code", sha: SHA });
+			assert.deepStrictEqual(parsed.patches, [{ name: "vitest-agent", marketplace: "claude-code", sha: SHA }]);
 			assert.strictEqual(parsed.mode, "commit");
 		}),
 	);
@@ -45,8 +45,12 @@ describe("parseInputs", () => {
 			// The discriminating half of the injection concern: an INPUT_-spelled key
 			// must resolve identically. If `parseInputs` regressed to a provider that
 			// only served bare names, this fails while the test above still passes.
-			const parsed = yield* withInputs({ INPUT_NAME: "vitest-agent", INPUT_SHA: SHA });
-			assert.deepStrictEqual(parsed.patches, [{ name: "vitest-agent", sha: SHA }]);
+			const parsed = yield* withInputs({
+				INPUT_NAME: "vitest-agent",
+				INPUT_MARKETPLACE: "claude-code",
+				INPUT_SHA: SHA,
+			});
+			assert.deepStrictEqual(parsed.patches, [{ name: "vitest-agent", marketplace: "claude-code", sha: SHA }]);
 		}),
 	);
 
@@ -54,15 +58,17 @@ describe("parseInputs", () => {
 		Effect.gen(function* () {
 			// The manual path decodes through the same schema as the json path, so
 			// the sha pattern applies to both equally.
-			const error = yield* Effect.flip(withInputs({ name: "vitest-agent", sha: "not-a-sha" }));
+			const error = yield* Effect.flip(
+				withInputs({ name: "vitest-agent", marketplace: "claude-code", sha: "not-a-sha" }),
+			);
 			assertInvalidInput(error);
-			assert.strictEqual(error.field, "name/url/path/sha");
+			assert.strictEqual(error.field, "name/marketplace/sha/path");
 		}),
 	);
 
 	it.effect("defaults auto-merge to rebase", () =>
 		Effect.gen(function* () {
-			const parsed = yield* withInputs({ name: "vitest-agent", sha: SHA });
+			const parsed = yield* withInputs({ name: "vitest-agent", marketplace: "claude-code", sha: SHA });
 			assert.strictEqual(parsed.autoMerge, "rebase");
 		}),
 	);
@@ -72,14 +78,21 @@ describe("parseInputs", () => {
 			// Asserts a NON-default method on purpose: the pre-port suite's
 			// "defaults to rebase" test passed against an inert stub that returned
 			// `rebase` unconditionally, so only this one proves the input was read.
-			const parsed = yield* withInputs({ name: "vitest-agent", sha: SHA, "auto-merge": "squash" });
+			const parsed = yield* withInputs({
+				name: "vitest-agent",
+				marketplace: "claude-code",
+				sha: SHA,
+				"auto-merge": "squash",
+			});
 			assert.strictEqual(parsed.autoMerge, "squash");
 		}),
 	);
 
 	it.effect("rejects an invalid auto-merge method", () =>
 		Effect.gen(function* () {
-			const error = yield* Effect.flip(withInputs({ name: "a", sha: SHA, "auto-merge": "octopus" }));
+			const error = yield* Effect.flip(
+				withInputs({ name: "a", marketplace: "claude-code", sha: SHA, "auto-merge": "octopus" }),
+			);
 			assertInvalidInput(error);
 			assert.strictEqual(error.field, "auto-merge");
 		}),
@@ -88,7 +101,7 @@ describe("parseInputs", () => {
 	it.effect("parses the json path into multiple patches", () =>
 		Effect.gen(function* () {
 			const parsed = yield* withInputs({
-				json: `{"plugins":[{"name":"a","sha":"${SHA}"},{"name":"b","path":"p"}]}`,
+				json: `{"plugins":[{"name":"a","marketplace":"claude-code","sha":"${SHA}"},{"name":"a","marketplace":"copilot","sha":"${SHA}","path":"p"}]}`,
 			});
 			assert.lengthOf(parsed.patches, 2);
 		}),
@@ -96,7 +109,9 @@ describe("parseInputs", () => {
 
 	it.effect("rejects a json input that is a bare array instead of a plugins envelope", () =>
 		Effect.gen(function* () {
-			const error = yield* Effect.flip(withInputs({ json: `[{"name":"a","sha":"${SHA}"}]` }));
+			const error = yield* Effect.flip(
+				withInputs({ json: `[{"name":"a","marketplace":"claude-code","sha":"${SHA}"}]` }),
+			);
 			assertInvalidInput(error);
 			assert.strictEqual(error.field, "json");
 		}),
@@ -112,7 +127,7 @@ describe("parseInputs", () => {
 
 	it.effect("rejects supplying both manual and json (XOR)", () =>
 		Effect.gen(function* () {
-			const error = yield* Effect.flip(withInputs({ name: "a", sha: SHA, json: "[]" }));
+			const error = yield* Effect.flip(withInputs({ name: "a", marketplace: "claude-code", sha: SHA, json: "[]" }));
 			assertInvalidInput(error);
 			assert.strictEqual(error.field, "json");
 			assert.strictEqual(error.reason, "provide either the manual fields or json, not both");
@@ -127,25 +142,57 @@ describe("parseInputs", () => {
 		}),
 	);
 
-	it.effect("rejects name with no field", () =>
+	it.effect("does not treat a non-empty marketplace alone as the manual path", () =>
 		Effect.gen(function* () {
-			const error = yield* Effect.flip(withInputs({ name: "a" }));
-			assertInvalidInput(error);
-			assert.strictEqual(error.field, "url/path/sha");
+			// A consumer's workflow_dispatch `marketplace` choice input has a default,
+			// so it is non-empty on EVERY manual run — including json-only ones.
+			// Counting it toward manual detection would reject those as an XOR
+			// violation.
+			const parsed = yield* withInputs({
+				marketplace: "claude-code",
+				json: `{"plugins":[{"name":"a","marketplace":"copilot","sha":"${SHA}"}]}`,
+			});
+			assert.deepStrictEqual(parsed.patches, [{ name: "a", marketplace: "copilot", sha: SHA }]);
 		}),
 	);
 
-	it.effect("rejects a url/path/sha with no name", () =>
+	it.effect("requires marketplace on the manual path", () =>
 		Effect.gen(function* () {
-			const error = yield* Effect.flip(withInputs({ sha: SHA }));
+			const error = yield* Effect.flip(withInputs({ name: "a", sha: SHA }));
+			assertInvalidInput(error);
+			assert.strictEqual(error.field, "marketplace");
+		}),
+	);
+
+	it.effect("requires sha on the manual path", () =>
+		Effect.gen(function* () {
+			const error = yield* Effect.flip(withInputs({ name: "a", marketplace: "copilot", path: "p" }));
+			assertInvalidInput(error);
+			assert.strictEqual(error.field, "sha");
+		}),
+	);
+
+	it.effect("requires name on the manual path", () =>
+		Effect.gen(function* () {
+			const error = yield* Effect.flip(withInputs({ marketplace: "copilot", sha: SHA }));
 			assertInvalidInput(error);
 			assert.strictEqual(error.field, "name");
 		}),
 	);
 
+	it.effect("rejects an unknown marketplace on the manual path", () =>
+		Effect.gen(function* () {
+			const error = yield* Effect.flip(withInputs({ name: "a", marketplace: "cursor", sha: SHA }));
+			assertInvalidInput(error);
+			assert.strictEqual(error.field, "name/marketplace/sha/path");
+		}),
+	);
+
 	it.effect("rejects an invalid mode", () =>
 		Effect.gen(function* () {
-			const error = yield* Effect.flip(withInputs({ name: "a", sha: SHA, mode: "sideways" }));
+			const error = yield* Effect.flip(
+				withInputs({ name: "a", marketplace: "claude-code", sha: SHA, mode: "sideways" }),
+			);
 			assertInvalidInput(error);
 			assert.strictEqual(error.field, "mode");
 		}),
@@ -155,6 +202,7 @@ describe("parseInputs", () => {
 		Effect.gen(function* () {
 			const parsed = yield* withInputs({
 				name: "a",
+				marketplace: "claude-code",
 				sha: SHA,
 				mode: "pr",
 				"base-branch": "release",
@@ -176,7 +224,7 @@ describe("parseInputs", () => {
 
 	it.effect("treats omitted optional inputs as absent, not empty strings", () =>
 		Effect.gen(function* () {
-			const parsed = yield* withInputs({ name: "a", sha: SHA });
+			const parsed = yield* withInputs({ name: "a", marketplace: "claude-code", sha: SHA });
 			assert.strictEqual(parsed.baseBranch, null);
 			assert.strictEqual(parsed.commitMessage, null);
 			assert.strictEqual(parsed.prTitle, null);
@@ -192,7 +240,9 @@ describe("parseInputs", () => {
 			// something like "yes" and being swallowed by the default, so a run
 			// the caller believed was a dry run lands a real commit. A malformed
 			// value must fail loudly — the default is for ABSENCE, not garbage.
-			const error = yield* withInputs({ name: "a", sha: SHA, "dry-run": "yes" }).pipe(Effect.flip);
+			const error = yield* withInputs({ name: "a", marketplace: "claude-code", sha: SHA, "dry-run": "yes" }).pipe(
+				Effect.flip,
+			);
 
 			// Deliberately NOT `assertInvalidInput`: `dry-run` is a `Config` read
 			// (`ActionInput.boolean` + `withDefault`), so a malformed value fails
@@ -202,6 +252,42 @@ describe("parseInputs", () => {
 			assert.strictEqual(error._tag, "ConfigError");
 			// Name the input too, so an unrelated failure cannot keep this green.
 			assert.include(String(error), "dry-run");
+		}),
+	);
+
+	it.effect("rejects a v1 json payload carrying url with a migration message", () =>
+		Effect.gen(function* () {
+			const error = yield* Effect.flip(
+				withInputs({
+					json: `{"plugins":[{"name":"a","marketplace":"claude-code","sha":"${SHA}","url":"https://github.com/a/b"}]}`,
+				}),
+			);
+			assertInvalidInput(error);
+			assert.strictEqual(error.field, "json");
+			assert.include(error.reason, "plugins[0].url");
+			assert.include(error.reason, "marketplace");
+		}),
+	);
+
+	it.effect("rejects a duplicate (marketplace, name) pair", () =>
+		Effect.gen(function* () {
+			const error = yield* Effect.flip(
+				withInputs({
+					json: `{"plugins":[{"name":"a","marketplace":"copilot","sha":"${SHA}"},{"name":"a","marketplace":"copilot","sha":"${"2".repeat(40)}"}]}`,
+				}),
+			);
+			assertInvalidInput(error);
+			assert.strictEqual(error.field, "json");
+			assert.include(error.reason, "duplicate");
+		}),
+	);
+
+	it.effect("allows one name in both marketplaces", () =>
+		Effect.gen(function* () {
+			const parsed = yield* withInputs({
+				json: `{"plugins":[{"name":"a","marketplace":"claude-code","sha":"${SHA}"},{"name":"a","marketplace":"copilot","sha":"${SHA}"}]}`,
+			});
+			assert.lengthOf(parsed.patches, 2);
 		}),
 	);
 });
