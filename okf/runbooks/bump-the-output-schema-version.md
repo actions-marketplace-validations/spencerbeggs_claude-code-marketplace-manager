@@ -19,8 +19,8 @@ sources:
     title: "drift policy, frozen labels, and exit codes"
 generated:
   by: okfit/claude-code
-  at: 2026-09-17T19:20:18Z
-  body_sha256: 86e1d18e8b69d8cf357286437979a20d9263a21a75d9b69d1bc02a6381883889
+  at: 2026-09-23T21:30:46Z
+  body_sha256: 32be14ae569782628e9750fa1c46857b8b996d34ddcefb651b16e229f2211a23
 ---
 
 # Bump the output schema version
@@ -59,11 +59,11 @@ shipped.
    cannot tell an additive change from a breaking one, so bump major by
    hand when you know it is breaking. Both edits are in
    `src/schema/input.ts`[^input-schema]:
-   - `OUTPUT_SCHEMA_VERSION` (`src/schema/input.ts:13`) — a `major.minor`
+   - `OUTPUT_SCHEMA_VERSION` (`src/schema/input.ts:8`) — a `major.minor`
      label. Both identities are built from it, so `SCHEMA_URL`,
      `INPUT_SCHEMA_URL`, and both config entries' current label move with
      it.
-   - `OUTPUT_SCHEMA_VERSIONS` (`src/schema/input.ts:20`) — keep the old label
+   - `OUTPUT_SCHEMA_VERSIONS` (`src/schema/input.ts:23`) — keep the old label
      in the array alongside the new one. The old label becomes a **frozen**
      version whose file the CLI verifies still exists and still declares
      exactly its derived `$id`, but never regenerates; advertising a label

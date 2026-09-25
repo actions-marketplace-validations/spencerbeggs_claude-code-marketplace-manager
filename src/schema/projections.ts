@@ -1,6 +1,7 @@
 import type { ChangeRecord } from "./marketplace.js";
+import { pluginKey } from "./marketplace.js";
 import type { ReportOutput, ResultStatus } from "./report-output.js";
-import { SCHEMA_URL, SCHEMA_VERSION } from "./report-output.js";
+import { SCHEMA_URL } from "./report-output.js";
 
 /** Inputs to the pure output projection. */
 export interface ProjectionInput {
@@ -18,21 +19,32 @@ export interface ProjectionInput {
 const deriveStatus = (noop: boolean, succeeded: boolean): ResultStatus =>
 	!succeeded ? "failed" : noop ? "no-op" : "success";
 
-/** Group flat change records into `{ name, fields[] }` per plugin, preserving order. */
-const groupPlugins = (
-	changes: ReadonlyArray<ChangeRecord>,
-): ReadonlyArray<{ name: string; fields: Array<"url" | "path" | "sha"> }> => {
-	const order: Array<string> = [];
-	const byName = new Map<string, Array<"url" | "path" | "sha">>();
+type ChangedPlugin = ReportOutput["plugins"][number];
+
+/**
+ * Group flat change records into one entry per `(marketplace, name)`,
+ * preserving first-seen order (a `Map` iterates in insertion order). Keyed on
+ * the pair, not the name: one plugin is routinely repinned in both marketplaces
+ * in the same run, and those are two entries in two files.
+ */
+const groupPlugins = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<ChangedPlugin> => {
+	const byKey = new Map<string, ChangedPlugin & { fields: Array<ChangeRecord["field"]> }>();
 	for (const c of changes) {
-		if (!byName.has(c.pluginName)) {
-			byName.set(c.pluginName, []);
-			order.push(c.pluginName);
+		const key = pluginKey(c.marketplace, c.pluginName);
+		let entry = byKey.get(key);
+		if (entry === undefined) {
+			entry = { marketplace: c.marketplace, manifest: c.path, name: c.pluginName, fields: [] };
+			byKey.set(key, entry);
 		}
-		byName.get(c.pluginName)?.push(c.field);
+		entry.fields.push(c.field);
 	}
-	return order.map((name) => ({ name, fields: byName.get(name) ?? [] }));
+	return [...byKey.values()];
 };
+
+/** Distinct manifest paths the changes touched, first-seen order. */
+const touchedManifests = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<string> => [
+	...new Set(changes.map((c) => c.path)),
+];
 
 /** Project the applied-change set and land outcome into the `result` struct. Pure. */
 export const toReportOutput = (input: ProjectionInput): ReportOutput => {
@@ -40,7 +52,6 @@ export const toReportOutput = (input: ProjectionInput): ReportOutput => {
 	const noop = input.changes.length === 0;
 	return {
 		$schema: SCHEMA_URL,
-		schemaVersion: SCHEMA_VERSION,
 		mode: input.mode,
 		status: deriveStatus(noop, input.succeeded),
 		noop,
@@ -49,6 +60,7 @@ export const toReportOutput = (input: ProjectionInput): ReportOutput => {
 		dryRun: input.dryRun,
 		pluginsUpdated: plugins.length,
 		plugins,
+		manifests: touchedManifests(input.changes),
 		commit: input.commitSha === null ? null : { sha: input.commitSha, url: input.commitUrl },
 		pr: input.prNumber === null ? null : { number: input.prNumber, url: input.prUrl },
 	};

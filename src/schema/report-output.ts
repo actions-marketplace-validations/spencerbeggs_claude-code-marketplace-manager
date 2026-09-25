@@ -1,5 +1,6 @@
 import { Schema } from "effect";
-import { OutputSchemaIdentity } from "./input.js";
+import { CLAUDE_CODE, COPILOT } from "../marketplaces.js";
+import { MarketplaceId, OutputSchemaIdentity } from "./input.js";
 
 /**
  * Hosted JSON Schema URL; emitted as the `result`'s `$schema`.
@@ -12,15 +13,16 @@ import { OutputSchemaIdentity } from "./input.js";
  */
 export const SCHEMA_URL: string = OutputSchemaIdentity.$id;
 
-/** In-band schema version; bumped only on a breaking shape change. */
-export const SCHEMA_VERSION = "1";
-
 /** Human-facing status derived from the machine booleans. */
 export type ResultStatus = "no-op" | "success" | "failed";
 
 const ChangedPlugin = Schema.Struct({
+	marketplace: MarketplaceId,
+	manifest: Schema.Literals([CLAUDE_CODE.path, COPILOT.path]).annotate({
+		description: "Manifest file the entry lives in.",
+	}),
 	name: Schema.String,
-	fields: Schema.Array(Schema.Literals(["url", "path", "sha"])),
+	fields: Schema.Array(Schema.Literals(["path", "sha"])),
 }).annotate({ identifier: "ChangedPlugin" });
 
 const CommitInfo = Schema.Struct({
@@ -42,7 +44,6 @@ export const ReportOutput = Schema.Struct({
 	// decoded `$schema` is typed `string`; runtime decoding still rejects any
 	// other URL.
 	$schema: Schema.Literal(SCHEMA_URL),
-	schemaVersion: Schema.Literal(SCHEMA_VERSION),
 	mode: Schema.Literals(["commit", "pr"]),
 	status: Schema.Literals(["no-op", "success", "failed"]),
 	noop: Schema.Boolean,
@@ -51,6 +52,9 @@ export const ReportOutput = Schema.Struct({
 	dryRun: Schema.Boolean,
 	pluginsUpdated: Schema.Int,
 	plugins: Schema.Array(ChangedPlugin),
+	manifests: Schema.Array(Schema.String).annotate({
+		description: "Manifest files the run changed (or, in dry-run, would change), in processing order.",
+	}),
 	commit: Schema.NullOr(CommitInfo),
 	pr: Schema.NullOr(PrInfo),
 }).annotate({

@@ -1,21 +1,21 @@
 ---
 type: Decision
 title: Explicit values only, no release lookup
-description: The action applies only the url/path/sha values a caller supplies; it never resolves a release, a ref, or a "latest" sentinel to a commit SHA on its own.
+description: The action applies only the sha/path values a caller supplies; it never resolves a release, a ref, or a "latest" sentinel to a commit SHA on its own.
 status: stable
 tags:
   - architecture
 sources:
   - id: schema
     resource: ../../src/schema/input.ts
-    title: PluginPatch — url/path/sha are the only patchable fields
+    title: PluginPatch — sha/path are the only patchable fields
   - id: errors
     resource: ../../src/errors/errors.ts
     title: PluginNotFoundError — an unknown plugin name is an error, not a create
 generated:
   by: okfit/claude-code
-  at: 2026-09-13T21:33:34Z
-  body_sha256: 272e4167bc441d2a4161362d9594ed15df30c18085c81b8cf7c99ff40f1f3e4c
+  at: 2026-09-23T21:08:46Z
+  body_sha256: d8092d7219fafc23f12e055da1ae642ffa47827fd85646b040bb91eb0c9617c3
 verified:
   - by: human:spencer
     at: 2026-09-17T19:22:49Z
@@ -36,7 +36,7 @@ already correct.
 
 ## Decision
 
-Apply only the explicit `url` / `path` / `sha` values a caller supplies in a
+Apply only the explicit `sha` / `path` values a caller supplies in a
 patch (`PluginPatch`, `schema/input.ts`)[^schema]. The action performs no
 release lookup and no ref→sha resolution of any kind: there is no "latest"
 sentinel value, and nothing in the input schema or the editor accepts one. A

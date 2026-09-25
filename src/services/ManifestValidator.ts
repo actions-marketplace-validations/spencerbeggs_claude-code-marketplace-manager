@@ -1,38 +1,17 @@
 import { Jsonc } from "@effected/jsonc";
-import Ajv from "ajv";
 import { Brand, Effect } from "effect";
 import { ManifestValidationError } from "../errors/errors.js";
-// This is a JSON asset import, not a relative TS/JS module import, so the `.json`
-// extension is the real one and must survive: the builder's `forceJsExtensions`
-// rewriting it to `.js` would break resolution.
-import marketplaceSchema from "../schema/claude-code-marketplace.json" with { type: "json" };
+import type { Marketplace } from "../marketplaces.js";
+import type { MarketplaceId } from "../schema/input.js";
 import type { ChangeRecord } from "../schema/marketplace.js";
 import type { ChangedEdit } from "./ManifestEditor.js";
 
-const SHA_RE = /^[0-9a-f]{40}$/;
-const GITHUB_URL_RE = /^https:\/\/github\.com\/[^/]+\/[^/]+(?:\.git)?\/?$/;
-
-// The bundled schema's `$schema` is draft-07 (verified in Task 1), so the default
-// `Ajv` export handles it. `strict: false` is deliberate: we're validating the
-// DATA against a third-party SchemaStore schema, not strict-linting the schema
-// itself — strict mode can throw on its keywords/formats. `logger: false`
-// silences ajv's "unknown format" warnings (we don't ship `ajv-formats`; the
-// `uri`/`uri-reference` formats in the SchemaStore schema go unvalidated,
-// which is fine — semantic checks re-validate `url` for touched plugins).
-const ajv = new Ajv({ strict: false, allErrors: true, logger: false });
-const validateStructural = ajv.compile(marketplaceSchema as object);
-
 interface RawPlugin {
 	readonly name?: unknown;
-	readonly source?: {
-		readonly source?: unknown;
-		readonly url?: unknown;
-		readonly path?: unknown;
-		readonly sha?: unknown;
-	};
+	readonly source?: unknown;
 }
 
-const semanticErrors = (parsed: unknown, patchedNames: ReadonlyArray<string>): Array<string> => {
+const semanticErrors = (m: Marketplace, parsed: unknown, patchedNames: ReadonlyArray<string>): Array<string> => {
 	const errors: Array<string> = [];
 	const plugins = (parsed as { plugins?: Array<RawPlugin> }).plugins ?? [];
 	const names = plugins.map((p) => (typeof p.name === "string" ? p.name : ""));
@@ -53,44 +32,40 @@ const semanticErrors = (parsed: unknown, patchedNames: ReadonlyArray<string>): A
 		}
 	}
 	for (const p of plugins) {
-		if (!patchedNames.includes(typeof p.name === "string" ? p.name : "")) {
+		const name = typeof p.name === "string" ? p.name : "";
+		if (!patchedNames.includes(name)) {
 			continue; // only re-check plugins we touched
 		}
-		const s = p.source ?? {};
-		if (s.source !== "git-subdir") {
-			errors.push(`${String(p.name)}: source.source must be "git-subdir"`);
-		}
-		if (typeof s.url !== "string" || !GITHUB_URL_RE.test(s.url)) {
-			errors.push(`${String(p.name)}: source.url must be a GitHub URL`);
-		}
-		if (typeof s.path !== "string" || s.path.length === 0) {
-			errors.push(`${String(p.name)}: source.path must be non-empty`);
-		}
-		if (typeof s.sha !== "string" || !SHA_RE.test(s.sha)) {
-			errors.push(`${String(p.name)}: source.sha must be 40-hex lowercase`);
-		}
+		errors.push(...m.sourceErrors(name, p.source));
 	}
 	return errors;
 };
 
-/** Validate the edited manifest structurally (ajv) and semantically. Fails with all reasons. */
+/**
+ * Validate an edited manifest of marketplace `m` structurally (ajv, the kind's
+ * schema) and semantically (the kind's source rules, for touched plugins).
+ * Fails with every reason at once.
+ */
 export const validateManifest = (
+	m: Marketplace,
 	editedText: string,
 	patchedNames: ReadonlyArray<string>,
 ): Effect.Effect<void, ManifestValidationError> =>
 	Effect.gen(function* () {
+		const fail = (errors: ReadonlyArray<string>) =>
+			new ManifestValidationError({ marketplace: m.id, path: m.path, errors });
 		const parsed = yield* Jsonc.parse(editedText).pipe(
-			Effect.mapError(() => new ManifestValidationError({ errors: ["resulting manifest is not valid JSON/JSONC"] })),
+			Effect.mapError(() => fail(["resulting manifest is not valid JSON/JSONC"])),
 		);
 		const errors: Array<string> = [];
-		if (!validateStructural(parsed)) {
-			for (const e of validateStructural.errors ?? []) {
+		if (!m.validateStructural(parsed)) {
+			for (const e of m.validateStructural.errors ?? []) {
 				errors.push(`${e.instancePath || "/"} ${e.message ?? "invalid"}`);
 			}
 		}
-		errors.push(...semanticErrors(parsed, patchedNames));
+		errors.push(...semanticErrors(m, parsed, patchedNames));
 		if (errors.length > 0) {
-			return yield* Effect.fail(new ManifestValidationError({ errors }));
+			return yield* Effect.fail(fail(errors));
 		}
 	});
 
@@ -100,11 +75,13 @@ export const validateManifest = (
  * Minted only by {@link validateEdit}, and required by
  * `ManifestCommitter.land` — so "commit unvalidated or byte-stable text" is a
  * compile error rather than an ordering discipline `program.ts` has to uphold.
- * The non-no-op half of the proof comes from the `ChangedEdit` parameter, which
- * callers can only obtain by narrowing past the no-op guard.
+ * It carries the marketplace and path it was validated as, so `land` writes the
+ * text to the file whose rules it passed and nowhere else.
  */
 export type ValidatedManifestChange = Brand.Branded<
 	{
+		readonly marketplace: MarketplaceId;
+		readonly path: string;
 		readonly editedText: string;
 		readonly changes: ReadonlyArray<ChangeRecord>;
 	},
@@ -114,14 +91,14 @@ export type ValidatedManifestChange = Brand.Branded<
 const ValidatedManifestChange = Brand.nominal<ValidatedManifestChange>();
 
 /**
- * Validate a changed edit and, on success, mint the {@link ValidatedManifestChange}
- * that `land` requires. The validation itself is {@link validateManifest} — this
- * adds only the proof-carrying wrapper.
+ * Validate a changed edit against marketplace `m` and, on success, mint the
+ * {@link ValidatedManifestChange} that `land` requires.
  */
 export const validateEdit = (
+	m: Marketplace,
 	edit: ChangedEdit,
 	patchedNames: ReadonlyArray<string>,
 ): Effect.Effect<ValidatedManifestChange, ManifestValidationError> =>
-	Effect.map(validateManifest(edit.editedText, patchedNames), () =>
-		ValidatedManifestChange({ editedText: edit.editedText, changes: edit.changes }),
+	Effect.map(validateManifest(m, edit.editedText, patchedNames), () =>
+		ValidatedManifestChange({ marketplace: m.id, path: m.path, editedText: edit.editedText, changes: edit.changes }),
 	);

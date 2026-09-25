@@ -1,13 +1,18 @@
 ---
 type: Consumer
 title: spencerbeggs/bot
-description: A workflow that repins Claude Code plugins via this action on manual dispatch or a repository_dispatch event.
+description: A workflow that repins Claude Code plugins via this action on manual dispatch or a repository_dispatch event. Still runs v1; a v2 migration is pending.
 repository: spencerbeggs/bot
 status: stable
 generated:
   by: okfit/claude-code
-  at: 2026-09-13T21:33:34Z
-  body_sha256: e4a00e81c6d162d203de1bf4eb77d9c29e88016f1aa39a65a5b4d5c35084dcb0
+  at: 2026-09-23T20:44:15Z
+  body_sha256: 29c0bcab5f3b768331f9abc0228a64f087968da46b0cbe1a190b816f0ac4ca0b
+sources:
+  - id: owner-plan
+    resource: conversation with the repository owner
+    title: "v2 design doc's consumer follow-up list"
+    last_modified: 2026-09-23T00:00:00Z
 ---
 
 # spencerbeggs/bot
@@ -45,6 +50,17 @@ false }`), and hands the action only the resolved `name`/`sha`/`path`/`json`
 values plus mode/credentials. The action owns everything from manifest read
 through validation to the landed commit.
 
+## v2 migration pending
+
+This workflow still calls the action at `@v1` and edits only the Claude
+Code manifest. The planned follow-up, in this consumer's own repository and
+not part of the v2 implementation itself, is: rename the workflow to "Repin
+Plugins", move the `uses:` reference to
+`spencerbeggs/ai-plugin-marketplace-manager@v2`, and add and forward a
+`marketplace` input alongside the existing `name`/`sha`/`path`/`json`
+surfaces.[^owner-plan] `@v1` keeps resolving through the repository-rename
+redirect in the meantime.
+
 ## Historical observation
 
 This consumer's PR #12 reached `mergeable: "CONFLICTING"` before the
@@ -56,3 +72,5 @@ see [pr-head-rerooted-in-one-ref-move](../decisions/pr-head-rerooted-in-one-ref-
 for the fix and
 [pr-head-branch-is-action-owned](../limitations/pr-head-branch-is-action-owned.md)
 for the accepted consequence in `pr` mode.
+
+[^owner-plan]: conversation with the repository owner

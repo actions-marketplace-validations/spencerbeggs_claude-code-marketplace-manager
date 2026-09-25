@@ -1,13 +1,13 @@
 ---
 type: Consumer
 title: savvy-web/systems
-description: A workflow that repins Claude Code plugins via this action on manual dispatch or a repository_dispatch event.
+description: A workflow that repins Claude Code plugins via this action on manual dispatch or a repository_dispatch event. Still runs v1; a v2 migration is pending.
 repository: savvy-web/systems
 status: stable
 generated:
   by: okfit/claude-code
-  at: 2026-09-13T21:33:34Z
-  body_sha256: ea272896e941347876b9a96a53d0b790e294d5398249868c02bf9bd3aed7de9e
+  at: 2026-09-23T20:44:15Z
+  body_sha256: 282694bb701aabe9c69fa00d1a7c59d305e440a88a5b87fd79cf745edeb41261
 ---
 
 # savvy-web/systems
@@ -18,6 +18,14 @@ triggered by `workflow_dispatch` (with `name`/`sha`/`path`/`json` inputs) or
 by a `repository_dispatch` event of type `plugin-release`. Structurally this
 workflow is byte-identical to
 [spencerbeggs/bot](spencerbeggs-bot.md)'s.
+
+## v2 migration pending
+
+This workflow still calls the action at `@v1` and still edits only the
+Claude Code manifest; the rename to `spencerbeggs/ai-plugin-marketplace-manager@v2`
+and the addition of a `marketplace` input are follow-up work in this
+consumer's own repository, not part of the v2 implementation itself. `@v1`
+keeps resolving through the repository-rename redirect in the meantime.
 
 ## Surfaces exercised
 

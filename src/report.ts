@@ -1,37 +1,53 @@
 import { GitHubMarkdown } from "@effected/github-actions";
 import type { ChangeRecord } from "./schema/marketplace.js";
+import { pluginKey } from "./schema/marketplace.js";
 import type { ReportOutput } from "./schema/report-output.js";
 
-const distinctPlugins = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<string> => {
-	const seen: Array<string> = [];
+/** First record of each distinct `(marketplace, name)` pair, in order. */
+const distinctPairs = (changes: ReadonlyArray<ChangeRecord>): ReadonlyArray<ChangeRecord> => {
+	const seen = new Set<string>();
+	const pairs: Array<ChangeRecord> = [];
 	for (const c of changes) {
-		if (!seen.includes(c.pluginName)) {
-			seen.push(c.pluginName);
+		const key = pluginKey(c.marketplace, c.pluginName);
+		if (!seen.has(key)) {
+			seen.add(key);
+			pairs.push(c);
 		}
 	}
-	return seen;
+	return pairs;
 };
 
 const bullet = (c: ChangeRecord): string => {
 	const ref = `${c.pluginName}@${c.manifestName}`;
 	switch (c.field) {
 		case "sha":
-			return `- pinned ${ref} to ${c.value}`;
+			return `- [${c.marketplace}] pinned ${ref} to ${c.value}`;
 		case "path":
-			return `- changed path of ${ref} to ${c.value}`;
-		case "url":
-			return `- changed url of ${ref} to ${c.value}`;
+			return `- [${c.marketplace}] changed path of ${ref} to ${c.value}`;
 	}
 };
 
-/** The `ai(marketplace): …` subject / PR title. */
+/**
+ * The `ai(marketplace): …` subject / PR title.
+ *
+ * @remarks
+ * Three shapes. One pair names its marketplace. One plugin repinned in every
+ * marketplace of the run — the usual monorepo release — lists them, because
+ * "repinned 2 plugins" would hide that it is one plugin. Anything else counts
+ * pairs.
+ */
 export const commitSubject = (changes: ReadonlyArray<ChangeRecord>): string => {
-	const plugins = distinctPlugins(changes);
-	if (plugins.length === 1) {
-		const [first] = changes;
-		return `ai(marketplace): repinned ${first.pluginName}@${first.manifestName}`;
+	const pairs = distinctPairs(changes);
+	const [first] = pairs;
+	if (first === undefined) {
+		return "ai(marketplace): repinned 0 plugins";
 	}
-	return `ai(marketplace): repinned ${plugins.length} plugins`;
+	const ref = `${first.pluginName}@${first.manifestName}`;
+	const onePlugin = pairs.every((p) => p.pluginName === first.pluginName && p.manifestName === first.manifestName);
+	if (onePlugin) {
+		return `ai(marketplace): repinned ${ref} (${pairs.map((p) => p.marketplace).join(", ")})`;
+	}
+	return `ai(marketplace): repinned ${pairs.length} plugins`;
 };
 
 /** One bullet per changed field, per plugin. */
@@ -49,6 +65,7 @@ export const buildSummary = (output: ReportOutput): string => {
 		["Status", output.status],
 		["Mode", output.mode],
 		["Plugins updated", String(output.pluginsUpdated)],
+		["Manifests", output.manifests.length > 0 ? output.manifests.join(", ") : "—"],
 		["Dry run", output.dryRun ? "yes" : "no"],
 	];
 	if (output.commit) {
@@ -62,7 +79,9 @@ export const buildSummary = (output: ReportOutput): string => {
 		GitHubMarkdown.table(["Property", "Value"], rows),
 	];
 	if (output.plugins.length > 0) {
-		blocks.push(GitHubMarkdown.list(output.plugins.map((p) => `\`${p.name}\` — ${p.fields.join(", ")}`)));
+		blocks.push(
+			GitHubMarkdown.list(output.plugins.map((p) => `\`${p.name}\` (${p.marketplace}) — ${p.fields.join(", ")}`)),
+		);
 	}
 	return blocks.join("\n\n");
 };

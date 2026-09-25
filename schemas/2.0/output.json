@@ -1,11 +1,21 @@
 {
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"$id": "https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/1.0/output.json",
+	"$id": "https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/2.0/output.json",
 	"$ref": "#/$defs/MarketplaceManagerResult",
 	"$defs": {
 		"ChangedPlugin": {
 			"type": "object",
 			"properties": {
+				"marketplace": {
+					"type": "string",
+					"enum": ["claude-code", "copilot"],
+					"description": "Which marketplace manifest the patch targets."
+				},
+				"manifest": {
+					"type": "string",
+					"enum": [".claude-plugin/marketplace.json", ".github/plugin/marketplace.json"],
+					"description": "Manifest file the entry lives in."
+				},
 				"name": {
 					"type": "string"
 				},
@@ -13,11 +23,11 @@
 					"type": "array",
 					"items": {
 						"type": "string",
-						"enum": ["url", "path", "sha"]
+						"enum": ["path", "sha"]
 					}
 				}
 			},
-			"required": ["name", "fields"],
+			"required": ["marketplace", "manifest", "name", "fields"],
 			"additionalProperties": false
 		},
 		"CommitInfo": {
@@ -66,12 +76,8 @@
 				"$schema": {
 					"type": "string",
 					"enum": [
-						"https://raw.githubusercontent.com/spencerbeggs/claude-code-marketplace-manager/main/schemas/1.0/output.json"
+						"https://raw.githubusercontent.com/spencerbeggs/ai-plugin-marketplace-manager/main/schemas/2.0/output.json"
 					]
-				},
-				"schemaVersion": {
-					"type": "string",
-					"enum": ["1"]
 				},
 				"mode": {
 					"type": "string",
@@ -102,6 +108,13 @@
 						"$ref": "#/$defs/ChangedPlugin"
 					}
 				},
+				"manifests": {
+					"type": "array",
+					"description": "Manifest files the run changed (or, in dry-run, would change), in processing order.",
+					"items": {
+						"type": "string"
+					}
+				},
 				"commit": {
 					"anyOf": [
 						{
@@ -125,7 +138,6 @@
 			},
 			"required": [
 				"$schema",
-				"schemaVersion",
 				"mode",
 				"status",
 				"noop",
@@ -134,6 +146,7 @@
 				"dryRun",
 				"pluginsUpdated",
 				"plugins",
+				"manifests",
 				"commit",
 				"pr"
 			],

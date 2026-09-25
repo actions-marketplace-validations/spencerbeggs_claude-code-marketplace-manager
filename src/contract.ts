@@ -29,7 +29,7 @@
  */
 export const INPUT_NAMES = [
 	"name",
-	"url",
+	"marketplace",
 	"path",
 	"sha",
 	"json",

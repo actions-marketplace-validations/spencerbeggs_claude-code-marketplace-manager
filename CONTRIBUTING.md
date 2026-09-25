@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for considering contributing to `claude-code-marketplace-manager`.
+Thank you for considering contributing to `ai-plugin-marketplace-manager`.
 This document explains how to set up your environment and submit changes.
 
 ## Prerequisites
@@ -12,8 +12,8 @@ This document explains how to set up your environment and submit changes.
 ## Setup
 
 ```bash
-git clone https://github.com/spencerbeggs/claude-code-marketplace-manager.git
-cd claude-code-marketplace-manager
+git clone https://github.com/spencerbeggs/ai-plugin-marketplace-manager.git
+cd ai-plugin-marketplace-manager
 pnpm install
 ```
 

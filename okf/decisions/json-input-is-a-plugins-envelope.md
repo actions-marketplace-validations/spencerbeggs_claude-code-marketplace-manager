@@ -15,8 +15,8 @@ sources:
     title: decode failure raises InvalidInputError
 generated:
   by: okfit/claude-code
-  at: 2026-09-13T21:33:34Z
-  body_sha256: 48fa88752bdf52b80446fd8ba7db08b95ef2754fbcd67f3cca23ebb8f6f7c100
+  at: 2026-09-23T21:08:46Z
+  body_sha256: 49e9a4f45aa50baee94f0e3b784e1b8a22a4822a5484219dc0bf58333782d2ca
 verified:
   - by: human:spencer
     at: 2026-09-17T19:22:49Z
@@ -28,17 +28,20 @@ verified:
 
 The action's `json` input path lets a caller supply a batch of per-plugin
 partial-merge patches in one payload instead of the single-plugin manual
-path (`name`/`url`/`path`/`sha`). The original shape for this payload was a
-bare array of patches. That shape had to change.
+path (`name`/`marketplace`/`sha`/`path`). The original shape for this
+payload was a bare array of patches. That shape had to change.
 
 ## Decision
 
 `JsonInput` is `Schema.Struct({ plugins: Schema.Array(PluginPatch) })`[^schema]
 — an object with a `plugins` key, not a bare array at the schema root. Each
-entry is a `PluginPatch`: it names an existing plugin and carries only the
-fields (`url`/`path`/`sha`) it changes; every other field on that plugin's
-entry in the manifest is left byte-stable. This partial-merge shape, keyed by
-`name`, was chosen over two alternatives evaluated for the same role:
+entry is a `PluginPatch`: it names an existing plugin in one `marketplace`
+and carries only the fields (`sha`/`path`) it changes; every other field on
+that plugin's entry in the manifest is left byte-stable. There is no `url`
+field — see
+[url-and-schema-version-dropped](url-and-schema-version-dropped.md). This
+partial-merge shape, keyed by `(marketplace, name)`, was chosen over two
+alternatives evaluated for the same role:
 full-manifest replacement, which would drop metadata and other plugins not
 named in the payload, and an RFC 7386 JSON Merge Patch, whose array semantics
 are opaque (a merge-patch array replaces wholesale rather than patching

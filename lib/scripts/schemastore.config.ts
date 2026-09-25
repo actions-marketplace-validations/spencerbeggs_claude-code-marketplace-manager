@@ -30,9 +30,10 @@
  *   for editor completion.
  *
  * Every object is generated closed (`additionalProperties: false`) — the
- * library's default — which is the contract consumers hold; the decoders in
- * `src/schema/` keep core's `"ignore"` default and tolerate excess keys, so
- * the published documents are deliberately the stricter of the two.
+ * library's default — which is the contract consumers hold; `decodeJsonInput`
+ * decodes with `onExcessProperty: "error"`, matching the closed published
+ * document; `decodeMarketplace` keeps core's `"ignore"` default because it
+ * reads third-party manifests.
  *
  * `pnpm schema:build` writes; `pnpm schema:check` is the same walk with no
  * writes and is the CI gate (it fails when a build would write anything).

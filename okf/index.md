@@ -4,7 +4,7 @@ okf_version: "0.2"
 
 # Project
 
-* [claude-code-marketplace-manager](project.md) - What this project is, its boundaries, and its non-goals.
+* [ai-plugin-marketplace-manager](project.md) - What this project is, its boundaries, and its non-goals.
 
 # Subdirectories
 

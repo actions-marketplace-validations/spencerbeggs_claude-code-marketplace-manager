@@ -1,16 +1,16 @@
 {
-	"name": "claude-code-marketplace-manager",
-	"version": "1.1.4",
+	"name": "ai-plugin-marketplace-manager",
+	"version": "2.0.1",
 	"private": true,
-	"description": "GitHub Action that re-pins git-subdir plugin sources in a Claude Code marketplace manifest as verified commits or pull requests.",
-	"keywords": ["github-action", "claude-code", "claude-code-plugin", "marketplace-manifest"],
-	"homepage": "https://github.com/spencerbeggs/claude-code-marketplace-manager#readme",
+	"description": "GitHub Action that repins plugin sources in Claude Code and GitHub Copilot marketplace manifests as verified commits or pull requests.",
+	"keywords": ["github-action", "claude-code", "github-copilot", "agent-plugins", "marketplace-manifest"],
+	"homepage": "https://github.com/spencerbeggs/ai-plugin-marketplace-manager#readme",
 	"bugs": {
-		"url": "https://github.com/spencerbeggs/claude-code-marketplace-manager/issues"
+		"url": "https://github.com/spencerbeggs/ai-plugin-marketplace-manager/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/spencerbeggs/claude-code-marketplace-manager.git"
+		"url": "git+https://github.com/spencerbeggs/ai-plugin-marketplace-manager.git"
 	},
 	"license": "MIT",
 	"author": "C. Spencer Beggs <spencer@beggs.codes>",
@@ -48,25 +48,24 @@
 		"@effect/vitest": "catalog:effect",
 		"@effected/schemastore-cli": "catalog:effected",
 		"@effected/yaml": "catalog:effected",
-		"@okfit/plugin": "^0.4.3",
-		"@savvy-web/github-action-builder": "^2.4.3",
-		"@savvy-web/silk": "^4.2.3",
-		"@vitest-agent/plugin": "^4.1.2"
+		"@okfit/plugin": "^0.5.2",
+		"@savvy-web/github-action-builder": "^2.4.6",
+		"@savvy-web/silk": "^4.2.9",
+		"@vitest-agent/plugin": "^4.1.7"
 	},
-	"packageManager": "pnpm@12.5.1+sha512.e3f305bc784a2bc89f5ad3b6138889470fae8d2af5f36b61216ec91c2c3d64089775f9de38aac331044ea40f245cb0d5666392dfdf65824e1907ef6a2c62de5f",
 	"engines": {
 		"node": ">=24.11.0"
 	},
 	"devEngines": {
 		"packageManager": {
 			"name": "pnpm",
-			"version": "12.5.1+sha512.e3f305bc784a2bc89f5ad3b6138889470fae8d2af5f36b61216ec91c2c3d64089775f9de38aac331044ea40f245cb0d5666392dfdf65824e1907ef6a2c62de5f",
-			"onFail": "ignore"
+			"version": "12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
+			"onFail": "download"
 		},
 		"runtime": [
 			{
 				"name": "node",
-				"version": "26.9.0",
+				"version": "26.10.0",
 				"onFail": "ignore"
 			}
 		]

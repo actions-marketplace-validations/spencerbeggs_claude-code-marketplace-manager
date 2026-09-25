@@ -2,41 +2,62 @@ import { assert, describe, it } from "@effect/vitest";
 import type { PullRequestInfo as PullRequestInfoType } from "@effected/github";
 import { GitBranch, GitCommit, PullRequest, PullRequestInfo, Repo, RepoRef } from "@effected/github";
 import { Effect, Layer, Option } from "effect";
+import type { Marketplace } from "../../src/marketplaces.js";
+import { CLAUDE_CODE, COPILOT } from "../../src/marketplaces.js";
 import { land } from "../../src/services/ManifestCommitter.js";
-import { MANIFEST_PATH } from "../../src/services/ManifestEditor.js";
 import { validateEdit } from "../../src/services/ManifestValidator.js";
+
+const SHA0 = "0".repeat(40);
+const SHA1 = "1".repeat(40);
 
 const ORIGINAL = `{
 	"name": "acme",
 	"owner": { "name": "acme" },
 	"plugins": [
-		{ "name": "p1", "source": { "source": "git-subdir", "url": "https://github.com/acme/p1", "path": "plugin", "sha": "${"0".repeat(40)}" } }
+		{ "name": "p1", "source": { "source": "git-subdir", "url": "https://github.com/acme/p1", "path": "plugin", "sha": "${SHA0}" } }
 	]
 }
 `;
-const EDITED = ORIGINAL.replace("0".repeat(40), "1".repeat(40));
+const EDITED = ORIGINAL.replace(SHA0, SHA1);
+
+const COPILOT_ORIGINAL = `{
+	"name": "acme",
+	"owner": { "name": "acme" },
+	"plugins": [
+		{ "name": "p1", "source": { "source": "github", "repo": "acme/p1", "sha": "${SHA0}" } }
+	]
+}
+`;
+const COPILOT_EDITED = COPILOT_ORIGINAL.replace(SHA0, SHA1);
 
 // `land` accepts only a validator-minted ValidatedManifestChange, so the fixture
 // is minted through the real `validateEdit` rather than cast into place. A
 // fixture that stopped validating throws here instead of silently weakening
 // every test below.
-const change = Effect.runSync(
-	validateEdit(
-		{
-			original: ORIGINAL,
-			editedText: EDITED,
-			changed: true,
-			manifestName: "acme",
-			changes: [{ pluginName: "p1", manifestName: "acme", field: "sha", value: "1".repeat(40) }],
-		},
-		["p1"],
-	),
-);
+const validated = (m: Marketplace, original: string, editedText: string) =>
+	Effect.runSync(
+		validateEdit(
+			m,
+			{
+				original,
+				editedText,
+				changed: true,
+				manifestName: "acme",
+				changes: [
+					{ marketplace: m.id, path: m.path, pluginName: "p1", manifestName: "acme", field: "sha", value: SHA1 },
+				],
+			},
+			["p1"],
+		),
+	);
+
+const change = validated(CLAUDE_CODE, ORIGINAL, EDITED);
+const copilotChange = validated(COPILOT, COPILOT_ORIGINAL, COPILOT_EDITED);
 
 const params = {
 	base: "main",
 	branch: "chore/repin-plugins",
-	change,
+	changes: [change] as const,
 	commitMessage: "ai(marketplace): repinned p1@acme",
 	prTitle: "ai(marketplace): repinned p1@acme",
 	prBody: "- pinned p1@acme to 1111111",
@@ -182,7 +203,7 @@ describe("land", () => {
 			const result = yield* land({ mode: "commit", ...params }).pipe(Effect.provide(h.layer));
 
 			assert.deepStrictEqual(h.commitFileCalls, [
-				{ branch: "main", message: params.commitMessage, paths: [MANIFEST_PATH] },
+				{ branch: "main", message: params.commitMessage, paths: [CLAUDE_CODE.path] },
 			]);
 			// The validated change's text is what reaches the tree, at the manifest
 			// path — not the original, and not some other field.
@@ -200,11 +221,11 @@ describe("land", () => {
 		Effect.gen(function* () {
 			const h = harness();
 			yield* land({ mode: "commit", ...params }).pipe(Effect.provide(h.layer));
-			assert.strictEqual(MANIFEST_PATH, ".claude-plugin/marketplace.json");
+			assert.strictEqual(CLAUDE_CODE.path, ".claude-plugin/marketplace.json");
 			assert.deepStrictEqual(h.contents, [EDITED]);
 			// The path the caller actually passed, not just the constant — commit
 			// mode writes through `commitFiles`, which takes its own changes list.
-			assert.deepStrictEqual(h.commitFileCalls[0]?.paths, [MANIFEST_PATH]);
+			assert.deepStrictEqual(h.commitFileCalls[0]?.paths, [CLAUDE_CODE.path]);
 		}),
 	);
 
@@ -232,7 +253,7 @@ describe("land", () => {
 			assert.notStrictEqual(h.upserts[0]?.sha, "base-sha");
 			// The commit is rooted at base's current tip.
 			assert.deepStrictEqual(h.commits, [{ message: params.commitMessage, tree: "new-tree", parents: ["base-sha"] }]);
-			assert.deepStrictEqual(h.trees, [{ baseTree: "tree-of-base-sha", paths: [MANIFEST_PATH] }]);
+			assert.deepStrictEqual(h.trees, [{ baseTree: "tree-of-base-sha", paths: [CLAUDE_CODE.path] }]);
 			assert.deepStrictEqual(h.contents, [EDITED]);
 
 			assert.strictEqual(result.commitSha, "new-commit-sha");
@@ -356,6 +377,28 @@ describe("land", () => {
 			const h = harness();
 			yield* land({ mode: "commit", ...params, base: "main", branch: "main" }).pipe(Effect.provide(h.layer));
 			assert.deepStrictEqual(h.commitFileCalls[0]?.branch, "main");
+		}),
+	);
+
+	it.effect("commit mode lands every validated manifest in a single commit", () =>
+		Effect.gen(function* () {
+			const h = harness();
+			yield* land({ mode: "commit", ...params, changes: [change, copilotChange] }).pipe(Effect.provide(h.layer));
+			assert.deepStrictEqual(h.commitFileCalls, [
+				{ branch: "main", message: params.commitMessage, paths: [CLAUDE_CODE.path, COPILOT.path] },
+			]);
+			assert.deepStrictEqual(h.contents, [EDITED, COPILOT_EDITED]);
+			assert.deepStrictEqual(h.calls, ["commit.commitFiles"]);
+		}),
+	);
+
+	it.effect("pr mode builds one tree holding every validated manifest and moves the ref once", () =>
+		Effect.gen(function* () {
+			const h = harness({ main: "base-sha" });
+			yield* land({ mode: "pr", ...params, changes: [change, copilotChange] }).pipe(Effect.provide(h.layer));
+			assert.deepStrictEqual(h.trees, [{ baseTree: "tree-of-base-sha", paths: [CLAUDE_CODE.path, COPILOT.path] }]);
+			assert.lengthOf(h.commits, 1);
+			assert.lengthOf(h.upserts, 1);
 		}),
 	);
 });
